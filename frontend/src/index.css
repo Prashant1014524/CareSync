@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+  }
+}
+
+/* Custom UI Polish */
+.glass-card {
+  @apply bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-xl;
+}

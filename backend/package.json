@@ -1,0 +1,29 @@
+{
+  "name": "healthcare-manager-backend",
+  "version": "1.0.0",
+  "description": "Backend service for Healthcare Appointment & Follow-up Manager",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@prisma/client": "^5.10.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.1.5",
+    "googleapis": "^176.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.5"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.2"
+  }
+}
