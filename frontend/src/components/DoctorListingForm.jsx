@@ -15,7 +15,7 @@ const fields = [
   { name: 'password', label: 'Password', type: 'password', autoComplete: 'new-password', minLength: 12 },
 ];
 
-export default function DoctorListingForm({ onClose }) {
+export default function DoctorListingForm({ onClose, onSignIn }) {
   const { applyAsDoctor } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,6 +42,7 @@ export default function DoctorListingForm({ onClose }) {
           <div>
             <h2 id="doctor-listing-title" className="text-xl font-bold text-slate-900">List your practice</h2>
             <p className="mt-1 text-sm text-slate-600">Create a doctor account and submit your clinic for review. Patients can book once your listing is approved.</p>
+            <button type="button" disabled={busy} onClick={onSignIn} className="mt-3 text-sm font-semibold text-sky-800 underline underline-offset-2">Already registered? Sign in</button>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className="text-slate-600">
             <X className="h-5 w-5" />

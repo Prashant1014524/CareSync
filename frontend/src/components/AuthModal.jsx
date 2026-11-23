@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import GoogleSignIn from './GoogleSignIn';
-import { X, Lock, Mail, User, Phone } from 'lucide-react';
+import { X, Lock, Mail, User, Phone, Stethoscope } from 'lucide-react';
 
-export default function AuthModal({ onClose, initialMode = 'login', inviteCode = '' }) {
+export default function AuthModal({ onClose, onListPractice, initialMode = 'login', inviteCode = '' }) {
   const { login, register, registerStaff, googleLogin } = useAuth();
   const [mode, setMode] = useState(initialMode);
   const [code, setCode] = useState(inviteCode);
@@ -57,7 +57,7 @@ export default function AuthModal({ onClose, initialMode = 'login', inviteCode =
         role="dialog"
         aria-modal="true"
         aria-label={dialogLabel}
-        className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5"
+        className="bg-white rounded-2xl max-w-md max-h-[90vh] overflow-y-auto w-full p-6 shadow-2xl space-y-5"
       >
         
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
@@ -94,11 +94,24 @@ export default function AuthModal({ onClose, initialMode = 'login', inviteCode =
 
         <p className="text-sm text-slate-600">
           {isStaff
-            ? 'Doctors and administrators sign up with an invitation from their clinic.'
+            ? 'Enter the invitation code your CareSync administrator sent you.'
             : isRegister
               ? 'Create an account to book appointments and view your visits.'
-              : 'Sign in with the email address associated with your account.'}
+              : 'Patients, doctors, and admins sign in here. Doctors use the email and password they registered with.'}
         </p>
+
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onListPractice}
+          className="flex w-full items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-left hover:bg-sky-100 disabled:opacity-60"
+        >
+          <Stethoscope aria-hidden="true" className="h-5 w-5 shrink-0 text-sky-700" />
+          <span>
+            <span className="block text-sm font-semibold text-sky-900">Doctor Sign Up</span>
+            <span className="block text-xs text-sky-800">List your practice</span>
+          </span>
+        </button>
 
         {!isStaff && <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />}
 

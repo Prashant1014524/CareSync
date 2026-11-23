@@ -115,8 +115,8 @@ export default function App() {
           <DashboardSwitcher onOpenAuth={handleOpenAuth} />
         </main>
         {authModalOpen && (authModalMode === 'practice'
-          ? <DoctorListingForm onClose={closeAuth} />
-          : <AuthModal initialMode={authModalMode} inviteCode={inviteCode} onClose={closeAuth} />
+          ? <DoctorListingForm onClose={closeAuth} onSignIn={() => handleOpenAuth('login')} />
+          : <AuthModal initialMode={authModalMode} inviteCode={inviteCode} onClose={closeAuth} onListPractice={() => handleOpenAuth('practice')} />
         )}
       </div>
     </AuthProvider>
