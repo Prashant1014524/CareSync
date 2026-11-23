@@ -30,9 +30,10 @@ async function searchDoctors(req, res, next) {
 
     const doctors = await prisma.user.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        name: true,
         doctorProfile: true,
-        doctorLeaves: true,
       },
       orderBy: { name: 'asc' },
     });

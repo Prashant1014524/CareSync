@@ -15,7 +15,8 @@ async function getProfile(req, res, next) {
       return res.status(404).json({ error: 'Doctor profile not found.' });
     }
 
-    res.json({ doctor });
+    const { passwordHash, ...profile } = doctor;
+    res.json({ doctor: profile });
   } catch (err) {
     next(err);
   }
@@ -67,9 +68,10 @@ async function updateProfile(req, res, next) {
       include: { doctorProfile: true },
     });
 
+    const { passwordHash, ...doctor } = updatedUser;
     res.json({
       message: 'Doctor profile updated successfully',
-      doctor: updatedUser,
+      doctor,
     });
   } catch (err) {
     next(err);

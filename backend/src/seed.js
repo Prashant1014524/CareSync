@@ -1,8 +1,25 @@
+require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const prisma = require('./prisma');
 
 async function seed() {
-  console.log('[Database Seed] Starting comprehensive database population...');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Demo seed is only available for disposable development databases.');
+  }
+
+  console.log('[Database Seed] Starting database initialization...');
+
+  // Idempotent check: If database is already initialized and FORCE_SEED is not set, skip wiping data
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: 'admin@clinic.com' },
+  });
+
+  if (existingAdmin && process.env.FORCE_SEED !== 'true') {
+    console.log('[Database Seed] Database already contains initial users. Skipping seed to preserve production data.');
+    return;
+  }
+
+  console.log('[Database Seed] Populating fresh initial data...');
 
   // Clear existing records in correct relation order
   await prisma.medicationReminder.deleteMany();

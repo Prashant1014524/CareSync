@@ -1,12 +1,23 @@
-# CareSync: Healthcare Appointment & Follow-up Platform
+# CareSync: Healthcare Appointment & Follow-up Platform (Production-Grade)
 
-CareSync is a full-stack healthcare appointment and follow-up platform built with Node.js, Express, React (Vite), Tailwind CSS, Prisma ORM, and Google Gemini LLM. It provides separate portals for **Patients**, **Doctors**, and **Admins**, featuring double-booking prevention, 5-minute slot hold reservations, doctor leave conflict management, automated medication reminders, email notifications, and Google Calendar integration.
+CareSync is an enterprise-grade full-stack healthcare appointment and follow-up platform built with **Node.js, Express, React (Vite), Tailwind CSS, Prisma ORM, Neon Serverless PostgreSQL, and Google Gemini LLM**. It delivers dedicated role-based portals for **Patients**, **Doctors**, and **Admins**, featuring double-booking concurrency locks, 5-minute slot hold reservations, doctor leave automated conflict resolution, AI pre/post visit summaries, automated medication reminders, and Google Calendar / Email synchronization.
+
+---
+
+## ⚡ High-Performance Tech Stack
+- **Database**: **Neon Serverless PostgreSQL** (SSL encrypted, auto-scaling connection pooling, zero-maintenance)
+- **ORM**: **Prisma ORM** with PostgreSQL schema, `@db.Text` type optimizations, and idempotent migrations
+- **Backend API**: Node.js & Express with **Helmet** security headers, strict CORS, rate-limiting, and deep `/api/health` DB ping checks
+- **AI Intelligence**: **Google Gemini 1.5 Flash** with resilient heuristic fallback parsing
+- **Background Jobs**: **Node-Cron** automated background worker for medication reminders and email retry queues
+- **Frontend**: **React 18 + Vite** with Tailwind CSS, Lucide icons, responsive drawer navigation, and instant Demo Role switcher
+- **Deployment**: Render (Backend Web Service) + Vercel (Frontend Global CDN)
 
 ---
 
 ## 🚀 Demo Accounts (Pre-Seeded)
 
-The application comes pre-populated with test accounts across all roles:
+The local demo seed creates these accounts. Run it only against a disposable development database.
 
 | Role | Email | Password | Details |
 | :--- | :--- | :--- | :--- |
@@ -25,7 +36,7 @@ The application comes pre-populated with test accounts across all roles:
 ```
 ├── backend/
 │   ├── prisma/
-│   │   └── schema.prisma        # Prisma ORM Database Schema (SQLite / Postgres)
+│   │   └── schema.prisma        # Prisma ORM PostgreSQL schema
 │   ├── src/
 │   │   ├── controllers/         # Auth, Admin, Doctor, Appointment, Leave, Reminder
 │   │   ├── middleware/          # JWT auth & Centralized Error Handler
@@ -54,16 +65,17 @@ The application comes pre-populated with test accounts across all roles:
 ## ⚙️ Quick Setup Guide
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- npm (v9 or higher)
+- Node.js 24 and npm
+- A disposable PostgreSQL database for local development
 
 ### 1. Backend Setup
 ```bash
 cd backend
-npm install
+npm ci
 
-# Push database schema & generate Prisma client
-npx prisma db push
+# Copy backend/.env.example to backend/.env and fill in both PostgreSQL URLs first.
+npm run build
+npm run prisma:deploy
 
 # Seed initial test accounts & sample appointments
 node src/seed.js
@@ -91,14 +103,16 @@ Create a `.env` file inside `backend/`:
 
 ```env
 PORT=5000
-DATABASE_URL="file:./dev.db" # Or postgresql://user:password@localhost:5432/healthcaredb
-JWT_SECRET="healthcare-jwt-secret-key-2026"
+DATABASE_URL="postgresql://caresync:local_password@localhost:5432/caresync"
+DIRECT_URL="postgresql://caresync:local_password@localhost:5432/caresync"
+JWT_SECRET="" # Set a unique secret of at least 32 characters for production
 
 # Google Gemini LLM API Key (Get from https://aistudio.google.com/)
 GEMINI_API_KEY="your-gemini-api-key-here"
 
 # Email Configuration (Nodemailer)
-# Leave SMTP_HOST empty for auto-generated Ethereal test account in dev console!
+# Set true to disable delivery in the public demo.
+EMAIL_DISABLED=false
 SMTP_HOST=""
 SMTP_PORT=587
 SMTP_USER=""
@@ -181,17 +195,17 @@ If the Gemini API key is omitted, quota is exceeded, or parsing fails, the syste
 
 ## 🚢 Hosted Application & Deployment Guide
 
-### Deploying Backend (Render / Railway / Supabase)
-1. Push repo to GitHub.
-2. Create a Web Service on **Render** pointing to `/backend`.
-3. Set Build Command: `npm install && npx prisma db push && node src/seed.js`.
-4. Set Start Command: `node src/index.js`.
-5. Environment Variables: Add `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`.
+### Deploy CareSync on free plans
 
-### Deploying Frontend (Vercel / Netlify)
-1. Import repo to **Vercel** pointing to `/frontend`.
-2. Set Build Command: `npm run build`. Output directory: `dist`.
-3. Environment Variable: `VITE_API_URL` = `https://your-backend-service.onrender.com/api`.
+1. Create a fresh **Neon Free** PostgreSQL database in Singapore to match the Render region. Keep its pooled and direct connection strings in your password manager. Use synthetic data for the hosted demo.
+2. Import the GitHub release branch into **Vercel Hobby** and set the root directory to `frontend`. Copy the assigned Vercel origin. The committed Vercel configuration sets the build and output directory.
+3. Import the same branch as a **Render Blueprint** using `render.yaml`. Enter the pooled Neon URL in `DATABASE_URL`, the direct URL in `DIRECT_URL`, and the exact Vercel origin without a trailing slash in `FRONTEND_URL`. Render generates `JWT_SECRET`. The build applies the checked-in migration to Neon. For a database already created with `prisma db push`, use a fresh database for the demo or baseline the existing schema before deploying.
+4. Set `VITE_API_URL` in Vercel to the Render HTTPS URL followed by `/api`, then redeploy the frontend. Verify the API's `/api/health` returns HTTP 200 and reports a connected database.
+5. From `backend`, run `npm run admin:create` once with `DATABASE_URL`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` set privately in your local shell or ignored `.env` file. Use a unique password of at least 16 characters and at most 72 bytes. Sign in as that administrator, create a fictional doctor, and book a slot from a separate patient account.
+
+Render's free API sleeps after idle periods. Allow for its first-request delay during the demo. Email delivery is disabled in the Blueprint. Booking uses PostgreSQL, so confirmed appointments persist across API restarts.
+
+Run `npm test` inside `backend` to check the registration API regression test locally.
 
 ---
 

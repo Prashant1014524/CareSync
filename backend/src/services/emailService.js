@@ -44,6 +44,10 @@ async function getTransporter() {
  * Send an email and log the result to DB
  */
 async function sendEmail({ to, subject, html, type = 'GENERAL' }) {
+  if (process.env.EMAIL_DISABLED === 'true') {
+    return { success: false, error: 'Email delivery is disabled.' };
+  }
+
   let status = 'PENDING';
   let errorMsg = null;
 
@@ -97,6 +101,8 @@ async function sendEmail({ to, subject, html, type = 'GENERAL' }) {
  * Retry failed emails
  */
 async function retryFailedEmails() {
+  if (process.env.EMAIL_DISABLED === 'true') return;
+
   const MAX_RETRIES = 3;
   const failedLogs = await prisma.emailLog.findMany({
     where: {

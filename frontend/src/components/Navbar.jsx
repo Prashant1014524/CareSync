@@ -27,7 +27,7 @@ export default function Navbar({ onOpenAuthModal }) {
           <div className="flex items-center space-x-3 sm:space-x-4">
             
             {/* Quick Demo Login Switcher */}
-            <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+            {import.meta.env.DEV && <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               <span className="text-slate-500 font-medium px-2">Demo Roles:</span>
               <button
                 onClick={() => quickDemoLogin('admin@clinic.com', 'admin123')}
@@ -47,7 +47,7 @@ export default function Navbar({ onOpenAuthModal }) {
               >
                 Patient
               </button>
-            </div>
+            </div>}
 
             {user ? (
               <div className="flex items-center space-x-3">

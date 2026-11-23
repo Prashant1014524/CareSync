@@ -74,7 +74,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
         )}
 
         {/* Quick Demo Login Preset Buttons */}
-        {!isRegister && (
+        {import.meta.env.DEV && !isRegister && (
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
             <span className="font-bold text-slate-700 block">Instant Demo Sign-in:</span>
             <div className="grid grid-cols-3 gap-2">

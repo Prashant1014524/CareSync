@@ -1,6 +1,12 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'healthcare-jwt-secret-key-2026';
+const developmentSecret = 'healthcare-jwt-secret-key-2026';
+const configuredSecret = process.env.JWT_SECRET;
+if (process.env.NODE_ENV === 'production' &&
+    (!configuredSecret || configuredSecret.trim().length < 32 || configuredSecret === developmentSecret)) {
+  throw new Error('Set JWT_SECRET to a unique secret of at least 32 characters.');
+}
+const JWT_SECRET = configuredSecret || developmentSecret;
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;

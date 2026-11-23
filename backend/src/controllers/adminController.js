@@ -110,9 +110,10 @@ async function updateDoctor(req, res, next) {
       include: { doctorProfile: true },
     });
 
+    const { passwordHash, ...profile } = updatedUser;
     res.json({
       message: 'Doctor profile updated successfully',
-      doctor: updatedUser,
+      doctor: profile,
     });
   } catch (err) {
     next(err);
@@ -126,7 +127,11 @@ async function getAllDoctors(req, res, next) {
   try {
     const doctors = await prisma.user.findMany({
       where: { role: 'DOCTOR' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
         doctorProfile: true,
         doctorLeaves: true,
       },
