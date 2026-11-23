@@ -10,7 +10,7 @@ CareSync is an enterprise-grade full-stack healthcare appointment and follow-up 
 - **Backend API**: Node.js & Express with **Helmet** security headers, strict CORS, rate-limiting, and deep `/api/health` DB ping checks
 - **AI Intelligence**: **Google Gemini 1.5 Flash** with resilient heuristic fallback parsing
 - **Background Jobs**: **Node-Cron** automated background worker for medication reminders and email retry queues
-- **Frontend**: **React 18 + Vite** with Tailwind CSS, Lucide icons, responsive drawer navigation, and instant Demo Role switcher
+- **Frontend**: **React 18 + Vite** with Tailwind CSS, Lucide icons, and role-based dashboards
 - **Deployment**: Render (Backend Web Service) + Vercel (Frontend Global CDN)
 
 ---
@@ -27,7 +27,7 @@ The local demo seed creates these accounts. Run it only against a disposable dev
 | **Patient** | `patient1@example.com` | `patient123` | John Doe |
 | **Patient** | `patient2@example.com` | `patient123` | Jane Miller |
 
-> 💡 **Quick Switcher**: Click the **Demo Roles** buttons in the top navbar to switch between Admin, Doctor, and Patient instantly without typing credentials!
+Use **Sign In** to enter the test account credentials manually when working with the local demo seed.
 
 ---
 
@@ -49,7 +49,7 @@ The local demo seed creates these accounts. Run it only against a disposable dev
 ├── frontend/
 │   ├── src/
 │   │   ├── components/          # Navbar, PatientPortal, DoctorPortal, AdminPortal, AuthModal
-│   │   ├── context/             # AuthContext (JWT & Demo Switcher)
+│   │   ├── context/             # AuthContext (JWT session)
 │   │   ├── services/            # Axios API Client
 │   │   ├── App.jsx              # Main App & Dashboard Switcher
 │   │   └── main.jsx

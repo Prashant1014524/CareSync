@@ -100,11 +100,9 @@ export default function App() {
         <main className="flex-1">
           <DashboardSwitcher onOpenAuth={handleOpenAuth} />
         </main>
-        <AuthModal
-          isOpen={authModalOpen}
-          initialMode={authModalMode}
-          onClose={() => setAuthModalOpen(false)}
-        />
+        {authModalOpen && (
+          <AuthModal initialMode={authModalMode} onClose={() => setAuthModalOpen(false)} />
+        )}
       </div>
     </AuthProvider>
   );

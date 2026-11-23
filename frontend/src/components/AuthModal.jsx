@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import GoogleSignIn from './GoogleSignIn';
 import { X, Lock, Mail, User, Phone, UserPlus, LogIn } from 'lucide-react';
 
-export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
-  const { login, register, googleLogin, quickDemoLogin } = useAuth();
+export default function AuthModal({ onClose, initialMode = 'login' }) {
+  const { login, register, googleLogin } = useAuth();
   const [isRegister, setIsRegister] = useState(initialMode === 'register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,8 +12,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  if (!isOpen) return null;
 
   const handleGoogleCredential = async (credential) => {
     setError(null);
@@ -49,7 +47,12 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={isRegister ? 'Patient registration' : 'Sign in to CareSync'}
+        className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5"
+      >
         
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
           {/* Tab Switcher */}
@@ -76,46 +79,20 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             </button>
           </div>
 
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button type="button" aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded text-xs text-red-700">
+          <div role="alert" className="bg-red-50 border-l-4 border-red-500 p-3 rounded text-xs text-red-700">
             {error}
           </div>
         )}
 
-        {/* Quick Demo Login Preset Buttons */}
-        {import.meta.env.DEV && !isRegister && (
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
-            <span className="font-bold text-slate-700 block">Instant Demo Sign-in:</span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => { quickDemoLogin('admin@clinic.com', 'admin123'); onClose(); }}
-                className="bg-indigo-600 text-white font-medium py-1.5 rounded hover:bg-indigo-700 transition"
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => { quickDemoLogin('dr.smith@clinic.com', 'doc123'); onClose(); }}
-                className="bg-sky-600 text-white font-medium py-1.5 rounded hover:bg-sky-700 transition"
-              >
-                Doctor
-              </button>
-              <button
-                type="button"
-                onClick={() => { quickDemoLogin('patient1@example.com', 'patient123'); onClose(); }}
-                className="bg-emerald-600 text-white font-medium py-1.5 rounded hover:bg-emerald-700 transition"
-              >
-                Patient
-              </button>
-            </div>
-          </div>
-        )}
+        <p className="text-sm text-slate-600">
+          {isRegister ? 'Create an account to book appointments and view your visits.' : 'Sign in with the email address associated with your account.'}
+        </p>
 
         <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />
 
@@ -123,11 +100,13 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           {isRegister && (
             <>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
+                <label htmlFor="auth-name" className="block font-semibold text-slate-700 mb-1">Full Name *</label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                   <input
+                    id="auth-name"
                     type="text"
+                    autoComplete="name"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -138,11 +117,13 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                <label htmlFor="auth-phone" className="block font-semibold text-slate-700 mb-1">Phone Number</label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                   <input
-                    type="text"
+                    id="auth-phone"
+                    type="tel"
+                    autoComplete="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+1 555-0199"
@@ -155,11 +136,13 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           )}
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Email Address *</label>
+            <label htmlFor="auth-email" className="block font-semibold text-slate-700 mb-1">Email Address *</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
+                id="auth-email"
                 type="email"
+                autoComplete={isRegister ? 'email' : 'username'}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -170,11 +153,13 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Password *</label>
+            <label htmlFor="auth-password" className="block font-semibold text-slate-700 mb-1">Password *</label>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
+                id="auth-password"
                 type="password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

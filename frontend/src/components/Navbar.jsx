@@ -1,9 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Stethoscope, User, LogOut, ShieldAlert, HeartPulse, UserCheck, UserPlus } from 'lucide-react';
+import { Stethoscope, LogOut, ShieldAlert, HeartPulse, UserCheck, UserPlus } from 'lucide-react';
 
 export default function Navbar({ onOpenAuthModal }) {
-  const { user, logout, quickDemoLogin } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
@@ -23,32 +23,7 @@ export default function Navbar({ onOpenAuthModal }) {
             </div>
           </div>
 
-          {/* User Controls & Demo Switcher */}
           <div className="flex items-center space-x-3 sm:space-x-4">
-            
-            {/* Quick Demo Login Switcher */}
-            {import.meta.env.DEV && <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-              <span className="text-slate-500 font-medium px-2">Demo Roles:</span>
-              <button
-                onClick={() => quickDemoLogin('admin@clinic.com', 'admin123')}
-                className={`px-2 py-1 rounded font-medium transition ${user?.role === 'ADMIN' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white'}`}
-              >
-                Admin
-              </button>
-              <button
-                onClick={() => quickDemoLogin('dr.smith@clinic.com', 'doc123')}
-                className={`px-2 py-1 rounded font-medium transition ${user?.role === 'DOCTOR' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white'}`}
-              >
-                Doctor
-              </button>
-              <button
-                onClick={() => quickDemoLogin('patient1@example.com', 'patient123')}
-                className={`px-2 py-1 rounded font-medium transition ${user?.role === 'PATIENT' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white'}`}
-              >
-                Patient
-              </button>
-            </div>}
-
             {user ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-lg">
@@ -86,7 +61,7 @@ export default function Navbar({ onOpenAuthModal }) {
                   className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center space-x-1"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
-                  <span>Register Account</span>
+                  <span>Patient Sign Up</span>
                 </button>
               </div>
             )}

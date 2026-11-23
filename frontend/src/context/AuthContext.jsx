@@ -55,19 +55,8 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  const quickDemoLogin = async (email, password) => {
-    setLoading(true);
-    try {
-      await login(email, password);
-    } catch (err) {
-      alert(`Demo login failed: ${err.response?.data?.error || err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, googleLogin, logout, quickDemoLogin }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, googleLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );
