@@ -47,19 +47,21 @@ async function markDoctorLeave({ doctorId, leaveDate, reason }) {
     },
   });
 
-  const cancelledCount = affectedAppointments.length;
-  console.log(`[Leave Manager] Found ${cancelledCount} appointments affected by leave on ${leaveDate}`);
+  let cancelledCount = 0;
 
   // 3. Process each affected appointment
   for (const app of affectedAppointments) {
     // Update DB status to CANCELLED
-    await prisma.appointment.update({
-      where: { id: app.id },
+    const updated = await prisma.appointment.updateMany({
+      where: { id: app.id, status: 'BOOKED' },
       data: {
         status: 'CANCELLED',
         cancelReason: `Doctor marked on leave: ${reason || 'Schedule updated'}`,
       },
     });
+
+    if (!updated.count) continue;
+    cancelledCount++;
 
     // Delete Google Calendar event if exists
     if (app.googleEventId) {

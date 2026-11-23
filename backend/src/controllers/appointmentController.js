@@ -6,6 +6,8 @@ const { deleteCalendarEvent } = require('../services/calendarService');
 const { paymentEnabled } = require('../services/razorpay.mts');
 const { publicDoctorProfile } = require('../services/doctorListing');
 
+const VISIT_NOTE_STATUSES = ['BOOKED', 'COMPLETED'];
+
 /**
  * Search Doctors by Specialization or Name
  */
@@ -153,7 +155,7 @@ async function submitPostVisitNotes(req, res, next) {
     if (req.user.role === 'DOCTOR' && appointment.doctorId !== req.user.id) {
       return res.status(403).json({ error: 'You can only submit notes for your own appointments.' });
     }
-    if (['PAYMENT_PENDING', 'PAYMENT_EXPIRED'].includes(appointment.status)) {
+    if (!VISIT_NOTE_STATUSES.includes(appointment.status)) {
       return res.status(409).json({ error: 'Visit notes require a confirmed appointment.' });
     }
 
@@ -164,10 +166,14 @@ async function submitPostVisitNotes(req, res, next) {
       prescriptionNotes,
     });
 
-    // Create or Update PostVisitNote in DB
-    const postVisitNote = await prisma.postVisitNote.upsert({
-      where: { appointmentId },
-      update: {
+    const postVisitNote = await prisma.$transaction(async tx => {
+      const visit = await tx.appointment.updateMany({
+        where: { id: appointmentId, status: { in: VISIT_NOTE_STATUSES } },
+        data: { status: 'COMPLETED' },
+      });
+      if (!visit.count) return null;
+
+      const notes = {
         clinicalNotes,
         diagnosis,
         prescriptionNotes,
@@ -175,47 +181,30 @@ async function submitPostVisitNotes(req, res, next) {
         medicationSchedule: JSON.stringify(postVisitResult.medicationSchedule),
         followUpSteps: JSON.stringify(postVisitResult.followUpSteps),
         rawLlmResponse: postVisitResult.rawLlmResponse,
-      },
-      create: {
-        appointmentId,
-        clinicalNotes,
-        diagnosis: diagnosis || null,
-        prescriptionNotes: prescriptionNotes || null,
-        patientSummary: postVisitResult.patientSummary,
-        medicationSchedule: JSON.stringify(postVisitResult.medicationSchedule),
-        followUpSteps: JSON.stringify(postVisitResult.followUpSteps),
-        rawLlmResponse: postVisitResult.rawLlmResponse,
-      },
+      };
+      const saved = await tx.postVisitNote.upsert({
+        where: { appointmentId },
+        update: notes,
+        create: { ...notes, appointmentId },
+      });
+
+      await tx.medicationReminder.deleteMany({ where: { appointmentId } });
+      const nextRunAt = new Date(Date.now() + 60000);
+      const reminders = postVisitResult.medicationSchedule
+        .filter(med => med.medicationName)
+        .map(med => ({
+          appointmentId,
+          patientId: appointment.patientId,
+          medicationName: med.medicationName,
+          dosage: med.dosage || 'As prescribed',
+          frequency: med.frequency || 'Once daily',
+          instructions: med.instructions || null,
+          nextRunAt,
+        }));
+      if (reminders.length) await tx.medicationReminder.createMany({ data: reminders });
+      return saved;
     });
-
-    // Mark appointment as COMPLETED
-    await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { status: 'COMPLETED' },
-    });
-
-    // Automatically Schedule Medication Reminders in DB
-    const now = new Date();
-    await prisma.medicationReminder.deleteMany({ where: { appointmentId } });
-
-    if (Array.isArray(postVisitResult.medicationSchedule)) {
-      for (const med of postVisitResult.medicationSchedule) {
-        if (med.medicationName) {
-          await prisma.medicationReminder.create({
-            data: {
-              appointmentId,
-              patientId: appointment.patientId,
-              medicationName: med.medicationName,
-              dosage: med.dosage || 'As prescribed',
-              frequency: med.frequency || 'Once daily',
-              instructions: med.instructions || null,
-              nextRunAt: new Date(now.getTime() + 60000), // First reminder in 1 min
-              isCompleted: false,
-            },
-          });
-        }
-      }
-    }
+    if (!postVisitNote) return res.status(409).json({ error: 'Visit notes require a confirmed appointment.' });
 
     // Send Post-Visit Email Summary to Patient
     const emailHtml = `
@@ -327,15 +316,19 @@ async function cancelAppointment(req, res, next) {
     if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
 
     // Authorization check
-    if (req.user.role === 'PATIENT' && appointment.patientId !== req.user.id) {
+    if ((req.user.role === 'PATIENT' && appointment.patientId !== req.user.id) ||
+        (req.user.role === 'DOCTOR' && appointment.doctorId !== req.user.id)) {
       return res.status(403).json({ error: 'Unauthorized to cancel this appointment.' });
     }
     if (appointment.status === 'PAYMENT_PENDING') {
       return res.status(409).json({ error: 'Pending checkout expires automatically.' });
     }
+    if (appointment.status !== 'BOOKED') {
+      return res.status(409).json({ error: 'Only booked appointments can be cancelled.' });
+    }
 
     const updated = await prisma.appointment.update({
-      where: { id: appointmentId },
+      where: { id: appointmentId, status: 'BOOKED' },
       data: {
         status: 'CANCELLED',
         cancelReason: reason || 'Cancelled by user',
@@ -363,6 +356,7 @@ async function cancelAppointment(req, res, next) {
 
     res.json({ message: 'Appointment cancelled successfully.', appointment: updated });
   } catch (err) {
+    if (err.code === 'P2025') return res.status(409).json({ error: 'The appointment status changed. Refresh and try again.' });
     next(err);
   }
 }

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Calendar, Clock, AlertTriangle, FileText, CheckCircle, Video, User, PlusCircle, X, ShieldAlert, Edit, Save } from 'lucide-react';
+import { Calendar, FileText, Video, User, X, ShieldAlert, Edit, Save } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function DoctorPortal() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState('');
+  const [appointmentFilter, setAppointmentFilter] = useState('ALL');
   const [selectedApp, setSelectedApp] = useState(null);
   const [practice, setPractice] = useState(user?.doctorProfile);
   
@@ -79,11 +82,15 @@ export default function DoctorPortal() {
   };
 
   const fetchAppointments = async () => {
+    setAppointmentsLoading(true);
+    setAppointmentsError('');
     try {
       const res = await api.get('/appointments/doctor');
       setAppointments(res.data.appointments);
     } catch (err) {
-      console.error('Error fetching doctor appointments:', err);
+      setAppointmentsError(err.response?.data?.error || 'Could not load appointments.');
+    } finally {
+      setAppointmentsLoading(false);
     }
   };
 
@@ -153,11 +160,21 @@ export default function DoctorPortal() {
     }
   };
 
+  const bookedAppointments = appointments.filter(app => app.status === 'BOOKED');
+  const appointmentGroups = [
+    { id: 'ALL', label: 'Total appointments', items: appointments },
+    { id: 'BOOKED', label: 'Booked', items: bookedAppointments },
+    { id: 'COMPLETED', label: 'Completed', items: appointments.filter(app => app.status === 'COMPLETED') },
+    { id: 'CANCELLED', label: 'Cancelled', items: appointments.filter(app => app.status === 'CANCELLED') },
+  ];
+  const selectedGroup = appointmentGroups.find(group => group.id === appointmentFilter);
+  const nextAppointment = bookedAppointments.find(app => Date.parse(app.startTime) >= Date.now());
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-sky-700 to-indigo-700 rounded-2xl p-6 text-white shadow-md flex justify-between items-center">
+      <div className="bg-gradient-to-r from-sky-700 to-indigo-700 rounded-2xl p-6 text-white shadow-md flex flex-wrap justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">Doctor Consultation Portal</h1>
           <p className="text-sky-100 text-sm mt-1">
@@ -172,10 +189,6 @@ export default function DoctorPortal() {
             <Edit className="w-4 h-4" />
             <span>Edit Profile & Schedule</span>
           </button>
-          <div className="bg-white/10 px-4 py-2 rounded-xl text-center backdrop-blur">
-            <span className="text-2xl font-bold block">{appointments.filter(a => a.status === 'BOOKED').length}</span>
-            <span className="text-xs text-sky-200">Scheduled Visits</span>
-          </div>
         </div>
       </div>
 
@@ -194,17 +207,51 @@ export default function DoctorPortal() {
         </section>
       )}
 
+      <section aria-labelledby="appointment-overview">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 id="appointment-overview" className="text-lg font-bold text-slate-900">Appointment overview</h2>
+          <button type="button" onClick={fetchAppointments} disabled={appointmentsLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">
+            {appointmentsLoading ? 'Refreshing…' : 'Refresh appointments'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {appointmentGroups.map(group => (
+            <button
+              key={group.id}
+              type="button"
+              aria-pressed={appointmentFilter === group.id}
+              onClick={() => setAppointmentFilter(group.id)}
+              className={`rounded-xl border p-4 text-left transition ${appointmentFilter === group.id
+                ? 'border-sky-600 bg-sky-50' : 'border-slate-200 bg-white hover:border-sky-300'}`}
+            >
+              <span className="block text-sm font-medium text-slate-700">{group.label}</span>
+              <span className="mt-1 block text-2xl font-bold tabular-nums text-slate-900">
+                {appointmentsLoading || appointmentsError ? '—' : group.items.length}
+              </span>
+            </button>
+          ))}
+        </div>
+        {!appointmentsLoading && !appointmentsError && nextAppointment && (
+          <p className="mt-3 text-sm text-slate-600">Next appointment {new Date(nextAppointment.startTime).toLocaleString()}</p>
+        )}
+      </section>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* LEFT 2 COLS: APPOINTMENT QUEUE */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
             <Calendar className="w-5 h-5 text-sky-600" />
-            <span>Scheduled Patient Appointments</span>
+            <span>{appointmentFilter === 'ALL' ? 'Patient appointments' : `${selectedGroup.label} appointments`}</span>
           </h2>
 
           <div className="space-y-4">
-            {appointments.map((app) => {
+            {appointmentsError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{appointmentsError}</p>}
+            {appointmentsLoading && <p role="status" className="text-sm text-slate-600">Loading appointments…</p>}
+            {!appointmentsLoading && !appointmentsError && !selectedGroup.items.length && (
+              <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">No {appointmentFilter === 'ALL' ? '' : selectedGroup.label.toLowerCase() + ' '}appointments to show.</p>
+            )}
+            {!appointmentsLoading && !appointmentsError && selectedGroup.items.map((app) => {
               const symptomForm = app.symptomForm;
               const questions = symptomForm?.suggestedQuestions ? JSON.parse(symptomForm.suggestedQuestions) : [];
               const isHighUrgency = symptomForm?.urgencyLevel === 'High';
@@ -240,7 +287,7 @@ export default function DoctorPortal() {
                       }`}>
                         {app.status}
                       </span>
-                      {app.googleMeetLink && (
+                      {app.status === 'BOOKED' && app.googleMeetLink && (
                         <a
                           href={app.googleMeetLink}
                           target="_blank"
@@ -279,7 +326,7 @@ export default function DoctorPortal() {
                   )}
 
                   {/* Action Buttons */}
-                  <div className="flex justify-end space-x-3 pt-2">
+                  {['BOOKED', 'COMPLETED'].includes(app.status) && <div className="flex justify-end space-x-3 pt-2">
                     <button
                       onClick={() => handleOpenNoteModal(app)}
                       className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center space-x-1.5"
@@ -287,7 +334,7 @@ export default function DoctorPortal() {
                       <FileText className="w-4 h-4" />
                       <span>{app.postVisitNote ? 'Edit Post-Visit Notes' : 'Complete Visit & Add Notes'}</span>
                     </button>
-                  </div>
+                  </div>}
 
                 </div>
               );
