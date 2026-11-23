@@ -127,52 +127,46 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
   const endTime = new Date(startTime.getTime() + slotDuration * 60000);
   const expiresAt = new Date(now.getTime() + HOLD_DURATION_MINUTES * 60000);
 
-  // Clean expired holds
-  await prisma.slotHold.deleteMany({
-    where: { expiresAt: { lt: now } },
-  });
+  const hold = await prisma.$transaction(async (tx) => {
+    // The unique (doctor, slot) key is the final arbiter when two requests race.
+    await tx.slotHold.deleteMany({
+      where: { doctorId, slotStartTime: startTime, expiresAt: { lte: now } },
+    });
 
-  // Check if slot is already booked
-  const existingApp = await prisma.appointment.findFirst({
-    where: {
-      doctorId,
-      startTime,
-      status: { in: ['BOOKED', 'COMPLETED', 'PAYMENT_PENDING'] },
-    },
-  });
+    const existingApp = await tx.appointment.findFirst({
+      where: {
+        doctorId,
+        startTime,
+        status: { in: ['BOOKED', 'COMPLETED', 'PAYMENT_PENDING'] },
+      },
+    });
+    if (existingApp) {
+      throw new Error('Slot has already been booked by another patient.');
+    }
 
-  if (existingApp) {
-    throw new Error('Slot has already been booked by another patient.');
-  }
+    const existingHold = await tx.slotHold.findUnique({
+      where: { doctorId_slotStartTime: { doctorId, slotStartTime: startTime } },
+    });
+    if (existingHold && existingHold.patientId !== patientId) {
+      throw new Error('Slot is currently held by another patient. Please try again in 5 minutes.');
+    }
 
-  // Check if held by someone else
-  const existingHold = await prisma.slotHold.findFirst({
-    where: {
-      doctorId,
-      slotStartTime: startTime,
-      expiresAt: { gt: now },
-      patientId: { not: patientId },
-    },
-  });
+    // Each patient may hold one slot per doctor; only move their hold after this
+    // requested slot has been confirmed available inside the transaction.
+    await tx.slotHold.deleteMany({
+      where: { doctorId, patientId, slotStartTime: { not: startTime } },
+    });
 
-  if (existingHold) {
-    throw new Error('Slot is currently held by another patient. Please try again in 5 minutes.');
-  }
+    if (existingHold) {
+      return tx.slotHold.update({
+        where: { id: existingHold.id },
+        data: { slotEndTime: endTime, expiresAt },
+      });
+    }
 
-  // Clear any previous hold by this patient for this doctor
-  await prisma.slotHold.deleteMany({
-    where: { doctorId, patientId },
-  });
-
-  // Create new hold
-  const hold = await prisma.slotHold.create({
-    data: {
-      doctorId,
-      patientId,
-      slotStartTime: startTime,
-      slotEndTime: endTime,
-      expiresAt,
-    },
+    return tx.slotHold.create({
+      data: { doctorId, patientId, slotStartTime: startTime, slotEndTime: endTime, expiresAt },
+    });
   });
 
   return {

@@ -89,7 +89,7 @@ model SlotHold {
 
   patient User @relation("PatientSlotHolds", fields: [patientId], references: [id], onDelete: Cascade)
 
-  @@index([doctorId, slotStartTime])
+  @@unique([doctorId, slotStartTime])
 }
 
 model Appointment {

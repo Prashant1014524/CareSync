@@ -9,15 +9,13 @@ The Healthcare Appointment & Follow-up Manager is an enterprise-grade platform b
 Simultaneous booking attempts by multiple patients for the exact same doctor slot present a classic distributed concurrency problem. CareSync solves this using a two-tier defense mechanism:
 
 ### Tier 1: Slot Hold Mechanism (Temporary TTL Reservation)
-Before a patient enters the pre-visit symptom intake wizard, a temporary 5-minute slot hold is registered in the `SlotHold` table. 
-- During these 5 minutes, other patients attempting to query or hold the slot are blocked (`409 Conflict`).
-- Holds auto-expire via `expiresAt` timestamps, preventing deadlocks if a user abandons checkout.
+Before a patient enters the pre-visit symptom intake wizard, a temporary 5-minute slot hold is registered in the `SlotHold` table. The database enforces one row per `(doctorId, slotStartTime)`, so simultaneous hold requests cannot both succeed. Expired rows are removed before a slot is reclaimed; competing requests receive `409 Conflict`.
 
 ### Tier 2: Atomic Database Transactions with Pessimistic/Optimistic Isolation
 When the patient submits the symptom form to finalize booking, the backend executes an **Atomic Database Transaction** (`prisma.$transaction`):
 1. **Re-Verification Lock**: The transaction re-queries the `Appointment` table for `(doctorId, startTime)` under strict database transaction isolation.
 2. **Conflict Abort**: If another process committed a booking milliseconds earlier, the transaction detects the collision and throws a `DOUBLE_BOOKING_PREVENTED` error, rolling back all DB changes immediately.
-3. **Unique Database Constraint**: The `Appointment` schema enforces a composite unique index (`@@unique([doctorId, startTime])`). Even if concurrent application threads bypass application logic, the database engine enforces physical uniqueness at the engine level.
+3. **Partial Unique Database Constraint**: PostgreSQL enforces one occupying appointment (`BOOKED`, `COMPLETED`, or `PAYMENT_PENDING`) per `(doctorId, startTime)`. Cancelled and expired appointments do not block future bookings.
 
 ---
 
@@ -35,7 +33,7 @@ When an Admin or Doctor marks a date as leave (`YYYY-MM-DD`), the platform execu
 ## 4. Slot Hold Mechanism & Expiry Architecture
 The slot reservation lifecycle prevents inventory hoarding while offering patients time to complete symptom intake:
 
-- **State Initialization**: When a slot is tapped, a `SlotHold` row is created (`expiresAt = now() + 5 minutes`).
+- **State Initialization**: When a slot is tapped, a `SlotHold` row is created (`expiresAt = now() + 5 minutes`). A unique database index allows only one hold per doctor and slot, including across multiple API instances.
 - **Dynamic Slot Availability Query**: When querying available slots, the application filters out slots where `expiresAt > now()` and `patientId != requestingUser`.
 - **Background & Passive Cleanup**: Expired holds are purged both passively during slot lookup queries and actively by the 1-minute `node-cron` background worker.
 
