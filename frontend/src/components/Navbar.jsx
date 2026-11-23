@@ -61,7 +61,7 @@ export default function Navbar({ onOpenAuthModal }) {
                   className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center space-x-1"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
-                  <span>Patient Sign Up</span>
+                  <span>Sign Up</span>
                 </button>
               </div>
             )}

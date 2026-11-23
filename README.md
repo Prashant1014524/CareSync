@@ -29,6 +29,10 @@ The local demo seed creates these accounts. Run it only against a disposable dev
 
 Use **Sign In** to enter the test account credentials manually when working with the local demo seed.
 
+### Staff registration
+
+Create the first administrator with `npm run admin:create` in `backend`. In the admin dashboard, use **Invite clinic staff** to choose **Doctor** or **Administrator** and enter the recipient's email. Share the private link with that person. They can open it or paste its code into **Sign Up → Staff Sign Up**, then set their own password. Links expire after 24 hours and work once. Issuing another invitation for the same email replaces the previous link.
+
 ---
 
 ## 📁 Repository Structure

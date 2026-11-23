@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import GoogleSignIn from './GoogleSignIn';
-import { X, Lock, Mail, User, Phone, UserPlus, LogIn } from 'lucide-react';
+import { X, Lock, Mail, User, Phone } from 'lucide-react';
 
-export default function AuthModal({ onClose, initialMode = 'login' }) {
-  const { login, register, googleLogin } = useAuth();
-  const [isRegister, setIsRegister] = useState(initialMode === 'register');
+export default function AuthModal({ onClose, initialMode = 'login', inviteCode = '' }) {
+  const { login, register, registerStaff, googleLogin } = useAuth();
+  const [mode, setMode] = useState(initialMode);
+  const [code, setCode] = useState(inviteCode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const isStaff = mode === 'staff';
+  const isRegister = mode !== 'login';
+  const dialogLabel = isStaff ? 'Staff registration' : isRegister ? 'Patient registration' : 'Sign in to CareSync';
 
   const handleGoogleCredential = async (credential) => {
     setError(null);
@@ -32,7 +36,9 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
     setLoading(true);
 
     try {
-      if (isRegister) {
+      if (isStaff) {
+        await registerStaff({ code: code.trim(), name, password });
+      } else if (isRegister) {
         await register({ email, password, name, phone });
       } else {
         await login(email, password);
@@ -50,33 +56,29 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={isRegister ? 'Patient registration' : 'Sign in to CareSync'}
+        aria-label={dialogLabel}
         className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5"
       >
         
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-          {/* Tab Switcher */}
-          <div className="flex space-x-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => { setIsRegister(false); setError(null); }}
-              className={`px-4 py-2 rounded-lg transition flex items-center space-x-1.5 ${
-                !isRegister ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Sign In</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setIsRegister(true); setError(null); }}
-              className={`px-4 py-2 rounded-lg transition flex items-center space-x-1.5 ${
-                isRegister ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Patient Registration</span>
-            </button>
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+            {[
+              ['login', 'Sign In'],
+              ['register', 'Patient Sign Up'],
+              ['staff', 'Staff Sign Up'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                onClick={() => { setMode(value); setPassword(''); setError(null); }}
+                className={`px-2 sm:px-3 py-2 rounded-lg transition ${
+                  mode === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <button type="button" aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -91,12 +93,31 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
         )}
 
         <p className="text-sm text-slate-600">
-          {isRegister ? 'Create an account to book appointments and view your visits.' : 'Sign in with the email address associated with your account.'}
+          {isStaff
+            ? 'Doctors and administrators sign up with an invitation from their clinic.'
+            : isRegister
+              ? 'Create an account to book appointments and view your visits.'
+              : 'Sign in with the email address associated with your account.'}
         </p>
 
-        <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />
+        {!isStaff && <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          {isStaff && (
+            <div>
+              <label htmlFor="staff-code" className="block font-semibold text-slate-700 mb-1">Invitation code</label>
+              <input
+                id="staff-code"
+                type="text"
+                required
+                autoComplete="off"
+                spellCheck={false}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              />
+            </div>
+          )}
           {isRegister && (
             <>
               <div>
@@ -116,7 +137,7 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
                 </div>
               </div>
 
-              <div>
+              {!isStaff && <div>
                 <label htmlFor="auth-phone" className="block font-semibold text-slate-700 mb-1">Phone Number</label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -130,12 +151,12 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
                     className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg"
                   />
                 </div>
-              </div>
+              </div>}
 
             </>
           )}
 
-          <div>
+          {!isStaff && <div>
             <label htmlFor="auth-email" className="block font-semibold text-slate-700 mb-1">Email Address *</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -150,7 +171,7 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
                 className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
               />
             </div>
-          </div>
+          </div>}
 
           <div>
             <label htmlFor="auth-password" className="block font-semibold text-slate-700 mb-1">Password *</label>
@@ -160,6 +181,7 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
                 id="auth-password"
                 type="password"
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
+                minLength={isStaff ? 12 : undefined}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -174,7 +196,7 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
             disabled={loading}
             className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 rounded-lg shadow transition"
           >
-            {loading ? 'Processing...' : isRegister ? 'Create patient account' : 'Sign In'}
+            {loading ? 'Processing...' : isStaff ? 'Create staff account' : isRegister ? 'Create patient account' : 'Sign In'}
           </button>
         </form>
 

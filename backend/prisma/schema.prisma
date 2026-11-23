@@ -25,6 +25,18 @@ model User {
   doctorLeaves        DoctorLeave[]
   slotHolds           SlotHold[]     @relation("PatientSlotHolds")
   medicationReminders MedicationReminder[]
+  staffInvites        StaffInvite[]
+}
+
+model StaffInvite {
+  email       String   @id
+  tokenHash   String   @unique
+  role        String
+  createdById String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
 }
 
 model DoctorProfile {

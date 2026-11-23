@@ -47,6 +47,7 @@ export function AuthProvider({ children }) {
   };
 
   const register = (formData) => startSession(api.post('/auth/register', formData));
+  const registerStaff = (formData) => startSession(api.post('/auth/staff/register', formData));
   const googleLogin = (credential) => startSession(api.post('/auth/google', { credential }));
 
   const logout = () => {
@@ -56,7 +57,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, googleLogin, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, registerStaff, googleLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );

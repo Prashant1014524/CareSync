@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import PatientPortal from './components/PatientPortal';
@@ -85,8 +85,17 @@ function DashboardSwitcher({ onOpenAuth }) {
 }
 
 export default function App() {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState('login');
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('staff-invite') || '');
+  const [authModalOpen, setAuthModalOpen] = useState(Boolean(inviteCode));
+  const [authModalMode, setAuthModalMode] = useState(inviteCode ? 'staff' : 'login');
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (new URLSearchParams(url.hash.slice(1)).has('staff-invite')) {
+      url.hash = '';
+      window.history.replaceState(null, '', url);
+    }
+  }, []);
 
   const handleOpenAuth = (mode = 'login') => {
     setAuthModalMode(mode);
@@ -101,7 +110,11 @@ export default function App() {
           <DashboardSwitcher onOpenAuth={handleOpenAuth} />
         </main>
         {authModalOpen && (
-          <AuthModal initialMode={authModalMode} onClose={() => setAuthModalOpen(false)} />
+          <AuthModal
+            initialMode={authModalMode}
+            inviteCode={inviteCode}
+            onClose={() => { setAuthModalOpen(false); setInviteCode(''); }}
+          />
         )}
       </div>
     </AuthProvider>

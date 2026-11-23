@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import StaffInvites from './StaffInvites';
 import { Users, Stethoscope, Calendar, Mail, Plus, Edit, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
 
 export default function AdminPortal() {
@@ -130,6 +131,8 @@ export default function AdminPortal() {
           <span>Add New Doctor</span>
         </button>
       </div>
+
+      <StaffInvites />
 
       {/* Analytics Cards */}
       {stats && (

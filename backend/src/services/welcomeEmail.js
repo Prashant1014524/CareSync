@@ -1,7 +1,7 @@
 const prisma = require('../prisma');
 
 const SUBJECT = 'Welcome to CareSync';
-const BODY = '<h1>Welcome to CareSync</h1><p>Your patient account is ready. Sign in to find a doctor, book an appointment, and view your upcoming visits.</p><p>CareSync Team</p>';
+const BODY = '<h1>Welcome to CareSync</h1><p>Your account is ready. Sign in to open your CareSync dashboard.</p><p>CareSync Team</p>';
 const RETRY_LIMIT = 3;
 
 function welcomeEmailEnabled() {
@@ -84,8 +84,12 @@ async function createPatientAccount(data) {
     const log = await queueWelcomeEmail(tx, user);
     return { user, log };
   });
-  deliverWelcomeEmail(log).catch(error => console.error('[Welcome email]', error.name));
+  sendQueuedWelcome(log);
   return user;
 }
 
-module.exports = { createPatientAccount, retryWelcomeEmails };
+function sendQueuedWelcome(log) {
+  deliverWelcomeEmail(log).catch(error => console.error('[Welcome email]', error.name));
+}
+
+module.exports = { createPatientAccount, queueWelcomeEmail, sendQueuedWelcome, retryWelcomeEmails };
