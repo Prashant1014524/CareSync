@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 const { JWT_SECRET } = require('../middleware/authMiddleware');
+const { verifyGoogleIdentity } = require('../services/googleIdentity.mts');
 
 /**
  * Register a patient account
@@ -72,7 +73,7 @@ async function login(req, res, next) {
       include: { doctorProfile: true },
     });
 
-    if (!user) {
+    if (!user?.passwordHash) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -99,6 +100,47 @@ async function login(req, res, next) {
     });
   } catch (err) {
     next(err);
+  }
+}
+
+async function googleLogin(req, res, next) {
+  const clientId = process.env.GOOGLE_SIGN_IN_CLIENT_ID;
+  if (!clientId) return res.status(503).json({ error: 'Google sign-in is unavailable.' });
+
+  const { credential } = req.body || {};
+  if (!req.is('application/json') || typeof credential !== 'string' || !credential || credential.length > 8192) {
+    return res.status(400).json({ error: 'A Google credential is required.' });
+  }
+
+  let identity;
+  try {
+    identity = await verifyGoogleIdentity(credential, clientId);
+  } catch {
+    return res.status(401).json({ error: 'Google sign-in could not be verified.' });
+  }
+  if (!identity) return res.status(401).json({ error: 'Use a verified Gmail or Google Workspace account.' });
+
+  try {
+    let user = await prisma.user.findUnique({ where: { googleSubject: identity.subject } });
+    if (!user) {
+      try {
+        user = await prisma.user.create({
+          data: { googleSubject: identity.subject, email: identity.email, name: identity.name, role: 'PATIENT' },
+        });
+      } catch (error) {
+        if (error.code !== 'P2002') throw error;
+        user = await prisma.user.findUnique({ where: { googleSubject: identity.subject } });
+        if (!user) return res.status(409).json({ error: 'An account already uses this email. Sign in with your password.' });
+      }
+    }
+
+    if (user.role !== 'PATIENT') return res.status(403).json({ error: 'Google sign-in is available for patients.' });
+
+    const { id, email, name, role, phone } = user;
+    const token = jwt.sign({ id, email, name, role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id, email, name, role, phone, doctorProfile: null } });
+  } catch (error) {
+    next(error);
   }
 }
 
@@ -130,5 +172,6 @@ async function getProfile(req, res, next) {
 module.exports = {
   register,
   login,
+  googleLogin,
   getProfile,
 };

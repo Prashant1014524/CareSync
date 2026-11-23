@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const prisma = require('../prisma');
 const { sendEmail, getMedicationReminderTemplate, retryFailedEmails } = require('./emailService');
+const { reconcileExpiredPayments } = require('./paymentService');
 
 function startScheduler() {
   console.log('[Scheduler Service] Starting background job cron scheduler...');
@@ -68,11 +69,12 @@ function startScheduler() {
 
       // 3. Process Failed Email Retries
       await retryFailedEmails();
+      await reconcileExpiredPayments();
 
     } catch (err) {
       console.error('[Scheduler Error]', err.message);
     }
-  });
+  }, { noOverlap: true });
 
   console.log('[Scheduler Service] Background cron tasks initialized.');
 }

@@ -21,6 +21,8 @@ export default function PatientPortal() {
   const [medicalHistory, setMedicalHistory] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState(null);
+  const [testCheckout, setTestCheckout] = useState(null);
+  const [paymentMessage, setPaymentMessage] = useState(null);
 
   // Appointments & Reminders tab
   const [activeTab, setActiveTab] = useState('doctors'); // 'doctors', 'appointments', 'reminders'
@@ -30,9 +32,42 @@ export default function PatientPortal() {
 
   useEffect(() => {
     fetchDoctors();
-    fetchAppointments();
     fetchReminders();
+    api.get('/payments/config').then(({ data }) => setTestCheckout(data.testCheckout)).catch(() => {});
+    const url = new URL(window.location.href);
+    const paymentId = url.searchParams.get('appointmentPayment');
+    if (paymentId) {
+      url.searchParams.delete('appointmentPayment');
+      for (const key of [...url.searchParams.keys()]) {
+        if (key.startsWith('razorpay_')) url.searchParams.delete(key);
+      }
+      window.history.replaceState(null, '', url);
+      setActiveTab('appointments');
+      checkPayment(paymentId, false);
+    } else {
+      fetchAppointments();
+    }
   }, []);
+
+  const checkPayment = async (appointmentId, openCheckout) => {
+    setBookingLoading(true);
+    setPaymentMessage(null);
+    try {
+      const { data } = await api.post(`/payments/${appointmentId}/checkout`);
+      if (openCheckout && data.checkoutUrl) {
+        window.location.assign(data.checkoutUrl);
+        return;
+      }
+      if (data.status === 'BOOKED') setPaymentMessage('Payment verified. Your appointment is booked.');
+      else if (data.status === 'PAYMENT_PENDING') setPaymentMessage('Payment is pending. You can check again from your appointment.');
+      else setPaymentMessage('Check the updated appointment status below.');
+    } catch {
+      setPaymentMessage('Could not reach checkout. Try again from your appointment.');
+    } finally {
+      fetchAppointments();
+      setBookingLoading(false);
+    }
+  };
 
   const fetchDoctors = async () => {
     try {
@@ -131,7 +166,7 @@ export default function PatientPortal() {
     setBookingError(null);
 
     try {
-      await api.post('/appointments/book', {
+      const { data } = await api.post('/appointments/book', {
         doctorId: selectedDoctor.id,
         slotStartTime: selectedSlot.startTime,
         symptoms,
@@ -140,13 +175,17 @@ export default function PatientPortal() {
         medicalHistory,
       });
 
-      alert('Appointment successfully booked! Confirmation email and Google Calendar event created.');
       setSelectedDoctor(null);
       setSelectedSlot(null);
       setHoldTimer(null);
       setSymptoms('');
       fetchAppointments();
       setActiveTab('appointments');
+      if (data.appointment.status === 'PAYMENT_PENDING') {
+        await checkPayment(data.appointment.id, true);
+      } else {
+        setPaymentMessage('Appointment booked.');
+      }
     } catch (err) {
       setBookingError(err.response?.data?.error || 'Failed to complete booking.');
     } finally {
@@ -244,7 +283,7 @@ export default function PatientPortal() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-slate-900">${doc.doctorProfile?.consultationFee || 50}</span>
+                    <span className="text-lg font-bold text-slate-900">₹{doc.doctorProfile?.consultationFee ?? 50}</span>
                     <span className="text-xs text-slate-500 block">/ visit</span>
                   </div>
                 </div>
@@ -278,7 +317,7 @@ export default function PatientPortal() {
             <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Book Appointment with {selectedDoctor.name}</h2>
-                <p className="text-xs text-slate-500">{selectedDoctor.doctorProfile?.specialization} • ${selectedDoctor.doctorProfile?.consultationFee}</p>
+                <p className="text-xs text-slate-500">{selectedDoctor.doctorProfile?.specialization} • ₹{selectedDoctor.doctorProfile?.consultationFee}</p>
               </div>
               <button onClick={() => setSelectedDoctor(null)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-6 h-6" />
@@ -409,7 +448,7 @@ export default function PatientPortal() {
                   disabled={bookingLoading}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-3 rounded-lg shadow-md transition flex items-center justify-center space-x-2"
                 >
-                  {bookingLoading ? 'Generating AI Summary & Booking...' : 'Confirm & Book Appointment'}
+                  {bookingLoading ? 'Processing booking…' : testCheckout ? 'Continue to Razorpay test checkout' : 'Confirm & Book Appointment'}
                 </button>
               </form>
             )}
@@ -422,6 +461,7 @@ export default function PatientPortal() {
       {activeTab === 'appointments' && (
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-900">Your Appointment History</h2>
+          {paymentMessage && <p role="status" className="text-sm text-slate-700">{paymentMessage}</p>}
           
           <div className="grid grid-cols-1 gap-4">
             {myAppointments.map((app) => (
@@ -437,8 +477,18 @@ export default function PatientPortal() {
                       app.status === 'BOOKED' ? 'bg-sky-100 text-sky-800' :
                       app.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                     }`}>
-                      {app.status}
+                      {app.status.replaceAll('_', ' ')}
                     </span>
+                    {app.status === 'PAYMENT_PENDING' && (
+                      <button
+                        type="button"
+                        disabled={bookingLoading}
+                        onClick={() => checkPayment(app.id, true)}
+                        className="bg-sky-700 text-white px-3 py-1 rounded text-xs"
+                      >
+                        Resume test checkout
+                      </button>
+                    )}
                     {app.googleMeetLink && (
                       <a
                         href={app.googleMeetLink}

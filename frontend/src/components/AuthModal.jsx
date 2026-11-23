@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import GoogleSignIn from './GoogleSignIn';
 import { X, Lock, Mail, User, Phone, UserPlus, LogIn } from 'lucide-react';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
-  const { login, register, quickDemoLogin } = useAuth();
+  const { login, register, googleLogin, quickDemoLogin } = useAuth();
   const [isRegister, setIsRegister] = useState(initialMode === 'register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,6 +14,19 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleGoogleCredential = async (credential) => {
+    setError(null);
+    setLoading(true);
+    try {
+      await googleLogin(credential);
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Google sign-in failed. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -102,6 +116,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             </div>
           </div>
         )}
+
+        <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           {isRegister && (

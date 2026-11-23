@@ -11,9 +11,11 @@ const doctorRoutes = require('./routes/doctorRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
+const { paymentRoutes, razorpayWebhook } = require('./routes/paymentRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const { startScheduler } = require('./services/schedulerService');
+const { createRedisRateLimit } = require('./services/redisRateLimit.mts');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -43,7 +45,7 @@ app.use(cors({
 }));
 
 // Rate Limiting
-const limiter = rateLimit({
+const limiterOptions = {
   windowMs: 15 * 60 * 1000,
   max: 500,
   message: {
@@ -52,8 +54,10 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-});
-app.use(limiter);
+};
+let apiLimiter;
+app.use((req, res, next) => apiLimiter(req, res, next));
+app.post('/api/payments/razorpay/webhook', express.raw({ type: 'application/json', limit: '128kb' }), razorpayWebhook);
 
 // Body Parser
 app.use(express.json({ limit: '10mb' }));
@@ -78,6 +82,7 @@ app.use('/api/doctor', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/reminders', reminderRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Production-ready Health Check route with Database ping
 app.get('/api/health', async (req, res) => {
@@ -105,24 +110,33 @@ app.get('/api/health', async (req, res) => {
 app.use(errorHandler);
 
 // Start Server and Cron Scheduler
-const server = app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(` CareSync Healthcare Platform API Server Running`);
-  console.log(` URL: http://localhost:${PORT}`);
-  console.log(` Health Check: http://localhost:${PORT}/api/health`);
-  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`=======================================================`);
+let server;
+let redisRateLimit;
+async function start() {
+  if (process.env.REDIS_URL) {
+    redisRateLimit = await createRedisRateLimit(process.env.REDIS_URL);
+  }
+  apiLimiter = rateLimit({ ...limiterOptions, store: redisRateLimit?.store });
+  server = app.listen(PORT, () => {
+    console.log('[Server] CareSync API listening on port', PORT);
 
-  // Start background jobs
-  startScheduler();
+    startScheduler();
+  });
+}
+start().catch(error => {
+  redisRateLimit?.disconnect();
+  console.error('[Startup]', error.name);
+  process.exitCode = 1;
 });
 
 // Graceful Shutdown
 const gracefulShutdown = async (signal) => {
   console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
+  if (!server) process.exit(0);
   server.close(async () => {
     console.log('[Server] HTTP connections closed.');
     try {
+      redisRateLimit?.disconnect();
       await prisma.$disconnect();
       console.log('[Database] Prisma client disconnected.');
       process.exit(0);

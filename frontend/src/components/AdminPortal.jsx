@@ -182,7 +182,7 @@ export default function AdminPortal() {
                   <td className="p-3 font-semibold text-sky-700">{doc.doctorProfile?.specialization}</td>
                   <td className="p-3 text-slate-600">{doc.doctorProfile?.startHour} - {doc.doctorProfile?.endHour}</td>
                   <td className="p-3 text-slate-600">{doc.doctorProfile?.slotDurationMinutes} mins</td>
-                  <td className="p-3 font-bold text-slate-900">${doc.doctorProfile?.consultationFee}</td>
+                  <td className="p-3 font-bold text-slate-900">₹{doc.doctorProfile?.consultationFee}</td>
                   <td className="p-3 text-right">
                     <button
                       onClick={() => handleOpenEditDoctor(doc)}

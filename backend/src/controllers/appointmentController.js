@@ -3,6 +3,7 @@ const { getAvailableSlots, holdSlot, bookAppointment } = require('../services/sl
 const { generatePostVisitSummary } = require('../services/llmService');
 const { sendEmail, getCancellationTemplate } = require('../services/emailService');
 const { deleteCalendarEvent } = require('../services/calendarService');
+const { paymentEnabled } = require('../services/razorpay.mts');
 
 /**
  * Search Doctors by Specialization or Name
@@ -97,20 +98,28 @@ async function confirmBooking(req, res, next) {
       return res.status(400).json({ error: 'doctorId, slotStartTime, and symptoms are required.' });
     }
 
+    if (typeof slotStartTime !== 'string' || !Number.isFinite(Date.parse(slotStartTime))) {
+      return res.status(400).json({ error: 'Choose a valid appointment time.' });
+    }
+    const requirePayment = paymentEnabled();
     const appointment = await bookAppointment({
       doctorId,
       patientId,
       slotStartTime,
       symptomsData: { symptoms, duration, severity, medicalHistory },
+      requirePayment,
     });
 
+    if (requirePayment) {
+      return res.status(202).json({ message: 'Test payment required.', appointment });
+    }
     res.status(201).json({
       message: 'Appointment booked successfully.',
       appointment,
     });
   } catch (err) {
-    if (err.message.includes('DOUBLE_BOOKING_PREVENTED')) {
-      return res.status(409).json({ error: err.message });
+    if (err.code === 'P2002' || err.message.includes('DOUBLE_BOOKING_PREVENTED')) {
+      return res.status(409).json({ error: 'This slot is unavailable. Please select another slot.' });
     }
     next(err);
   }
@@ -139,6 +148,9 @@ async function submitPostVisitNotes(req, res, next) {
 
     if (req.user.role === 'DOCTOR' && appointment.doctorId !== req.user.id) {
       return res.status(403).json({ error: 'You can only submit notes for your own appointments.' });
+    }
+    if (['PAYMENT_PENDING', 'PAYMENT_EXPIRED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'Visit notes require a confirmed appointment.' });
     }
 
     // Generate LLM Post-Visit Summary & Medication Schedule
@@ -280,7 +292,7 @@ async function getDoctorAppointments(req, res, next) {
     }
 
     const appointments = await prisma.appointment.findMany({
-      where: { doctorId },
+      where: { doctorId, status: { notIn: ['PAYMENT_PENDING', 'PAYMENT_EXPIRED'] } },
       include: {
         patient: { select: { id: true, name: true, email: true, phone: true } },
         symptomForm: true,
@@ -313,6 +325,9 @@ async function cancelAppointment(req, res, next) {
     // Authorization check
     if (req.user.role === 'PATIENT' && appointment.patientId !== req.user.id) {
       return res.status(403).json({ error: 'Unauthorized to cancel this appointment.' });
+    }
+    if (appointment.status === 'PAYMENT_PENDING') {
+      return res.status(409).json({ error: 'Pending checkout expires automatically.' });
     }
 
     const updated = await prisma.appointment.update({

@@ -51,7 +51,7 @@ async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
   const existingAppointments = await prisma.appointment.findMany({
     where: {
       doctorId,
-      status: 'BOOKED',
+      status: { in: ['BOOKED', 'COMPLETED', 'PAYMENT_PENDING'] },
       startTime: { gte: dayStart, lt: dayEnd },
     },
   });
@@ -136,7 +136,7 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
     where: {
       doctorId,
       startTime,
-      status: 'BOOKED',
+      status: { in: ['BOOKED', 'COMPLETED', 'PAYMENT_PENDING'] },
     },
   });
 
@@ -184,7 +184,7 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
 /**
  * Confirm & Book Slot with Double-Booking Prevention (Atomic DB Transaction)
  */
-async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsData }) {
+async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsData, requirePayment = false }) {
   const now = new Date();
   const startTime = new Date(slotStartTime);
 
@@ -224,7 +224,7 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
       where: {
         doctorId,
         startTime,
-        status: 'BOOKED',
+        status: { in: ['BOOKED', 'COMPLETED', 'PAYMENT_PENDING'] },
       },
     });
 
@@ -233,6 +233,28 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
     }
 
     const slotEndTime = new Date(startTime.getTime() + doctor.doctorProfile.slotDurationMinutes * 60000);
+    let payment;
+    if (requirePayment) {
+      const expiresAt = new Date(Date.now() + 20 * 60000);
+      if (startTime <= expiresAt) {
+        throw Object.assign(new Error('Choose a slot at least 20 minutes from now.'), { statusCode: 409 });
+      }
+      const hold = await tx.slotHold.findFirst({
+        where: { doctorId, patientId, slotStartTime: startTime, expiresAt: { gt: new Date() } },
+      });
+      const { startHour, endHour, slotDurationMinutes, consultationFee } = doctor.doctorProfile;
+      const dayStart = new Date(`${dateStr}T${startHour}:00.000Z`);
+      const dayEnd = new Date(`${dateStr}T${endHour}:00.000Z`);
+      const aligned = (startTime - dayStart) % (slotDurationMinutes * 60000) === 0;
+      if (!hold || !aligned || startTime < dayStart || slotEndTime > dayEnd) {
+        throw Object.assign(new Error('Select an available slot and reserve it again.'), { statusCode: 409 });
+      }
+      const amountPaise = Math.round(consultationFee * 100);
+      if (!Number.isSafeInteger(amountPaise) || amountPaise < 100 || amountPaise > 2147483647) {
+        throw Object.assign(new Error('This doctor has an invalid consultation fee.'), { statusCode: 409 });
+      }
+      payment = { create: { amountPaise, expiresAt } };
+    }
 
     // Create Appointment
     const app = await tx.appointment.create({
@@ -241,7 +263,8 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
         patientId,
         startTime,
         endTime: slotEndTime,
-        status: 'BOOKED',
+        status: requirePayment ? 'PAYMENT_PENDING' : 'BOOKED',
+        payment,
       },
     });
 
@@ -268,7 +291,12 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
     return app;
   });
 
-  // 3. Post-transaction external integrations (Google Calendar & Email Notifications)
+  if (requirePayment) return appointment;
+  return notifyBooking(appointment, preVisitSummary);
+}
+
+async function notifyBooking(appointment, preVisitSummary) {
+  const { doctorId, patientId } = appointment;
   const patient = await prisma.user.findUnique({ where: { id: patientId } });
   const doctor = await prisma.user.findUnique({ where: { id: doctorId }, include: { doctorProfile: true } });
 
@@ -328,4 +356,5 @@ module.exports = {
   getAvailableSlots,
   holdSlot,
   bookAppointment,
+  notifyBooking,
 };

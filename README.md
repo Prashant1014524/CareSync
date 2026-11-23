@@ -207,6 +207,13 @@ Render's free API sleeps after idle periods. Allow for its first-request delay d
 
 Run `npm test` inside `backend` to check the registration API regression test locally.
 
+### Google sign-in, Redis, and test checkout
+
+- **Google sign-in.** Create a Web application OAuth client in Google Cloud. Add `http://localhost:3000` and your deployed Vercel origin to its authorized JavaScript origins. Put the client ID in `GOOGLE_SIGN_IN_CLIENT_ID` on the API and in `VITE_GOOGLE_SIGN_IN_CLIENT_ID` on the frontend, then rebuild the frontend. The same button signs up new patients or signs them back in. Existing password accounts keep their original sign-in method.
+- **Redis.** The Render Blueprint creates a private free Key Value instance and sets the API's `REDIS_URL`. For local development, set `REDIS_URL=redis://127.0.0.1:6379` if you run Redis locally. The API uses Redis for rate-limit counters and uses a per-process store when the URL is unset. PostgreSQL retains patient, appointment, and payment records.
+- **Razorpay test checkout.** Add `RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` to the API environment. Configure the same webhook secret in Razorpay and subscribe to `payment_link.paid`, `payment_link.expired`, and `payment_link.cancelled` at `https://your-api.onrender.com/api/payments/razorpay/webhook`. Use the hosted standard Payment Link and the test methods available in your Razorpay account. The fee is stored in paise and comes from the doctor's profile. Pending checkout holds the slot for up to 20 minutes plus any delay in verifying expiry. For cancelled test bookings, review the transaction in the Razorpay test dashboard. Test keys only are accepted.
+- Apply the checked-in migrations with `npm run prisma:deploy` in `backend`. Run `npm run typecheck` to check the new TypeScript services. The backend uses Node.js 24 to load TypeScript modules.
+
 ---
 
 ## 📦 Packaging Deliverable ZIP

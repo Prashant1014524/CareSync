@@ -5,7 +5,7 @@ services:
     plan: free
     region: singapore
     rootDir: backend
-    buildCommand: npm ci && npm test && npm run build && npm run prisma:deploy
+    buildCommand: npm ci --include=dev && npm run typecheck && npm test && npm run build && npm run prisma:deploy
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -23,3 +23,13 @@ services:
         sync: false
       - key: EMAIL_DISABLED
         value: "true"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: caresync-rate-limit
+          property: connectionString
+  - type: keyvalue
+    name: caresync-rate-limit
+    plan: free
+    region: singapore
+    ipAllowList: []

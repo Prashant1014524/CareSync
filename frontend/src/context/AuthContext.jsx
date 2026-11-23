@@ -37,14 +37,17 @@ export function AuthProvider({ children }) {
     return userData;
   };
 
-  const register = async (formData) => {
-    const res = await api.post('/auth/register', formData);
+  const startSession = async (request) => {
+    const res = await request;
     const { token: newToken, user: userData } = res.data;
     localStorage.setItem('care_token', newToken);
     setToken(newToken);
     setUser(userData);
     return userData;
   };
+
+  const register = (formData) => startSession(api.post('/auth/register', formData));
+  const googleLogin = (credential) => startSession(api.post('/auth/google', { credential }));
 
   const logout = () => {
     localStorage.removeItem('care_token');
@@ -64,7 +67,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, quickDemoLogin }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, googleLogin, logout, quickDemoLogin }}>
       {children}
     </AuthContext.Provider>
   );

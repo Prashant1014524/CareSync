@@ -424,7 +424,7 @@ export default function DoctorPortal() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Consultation Fee ($)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Consultation Fee (₹)</label>
                   <input
                     type="number"
                     value={doctorProfileData.consultationFee}
