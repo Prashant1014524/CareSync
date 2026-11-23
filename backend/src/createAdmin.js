@@ -8,8 +8,8 @@ async function createAdmin() {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Provide a valid ADMIN_EMAIL.');
   }
-  if (!password || password.length < 16 || Buffer.byteLength(password) > 72) {
-    throw new Error('Provide an ADMIN_PASSWORD of at least 16 characters and at most 72 bytes.');
+  if (!password || password.length < 12 || Buffer.byteLength(password) > 72) {
+    throw new Error('Provide an ADMIN_PASSWORD of at least 12 characters and at most 72 bytes.');
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
