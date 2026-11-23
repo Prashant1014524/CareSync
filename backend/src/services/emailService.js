@@ -107,6 +107,7 @@ async function retryFailedEmails() {
   const failedLogs = await prisma.emailLog.findMany({
     where: {
       status: 'FAILED',
+      type: { not: 'WELCOME' },
       retryCount: { lt: MAX_RETRIES },
     },
     take: 10,

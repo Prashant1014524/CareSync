@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 const { JWT_SECRET } = require('../middleware/authMiddleware');
 const { verifyGoogleIdentity } = require('../services/googleIdentity.mts');
+const { createPatientAccount } = require('../services/welcomeEmail');
 
 /**
  * Register a patient account
@@ -13,6 +14,10 @@ async function register(req, res, next) {
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required.' });
+    }
+
+    if (typeof email !== 'string' || !/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
     }
 
     if (role !== undefined && (typeof role !== 'string' || role.toUpperCase() !== 'PATIENT')) {
@@ -26,14 +31,12 @@ async function register(req, res, next) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        name,
-        phone: phone || null,
-        role: 'PATIENT',
-      },
+    const user = await createPatientAccount({
+      email,
+      passwordHash,
+      name,
+      phone: phone || null,
+      role: 'PATIENT',
     });
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, {
@@ -124,8 +127,8 @@ async function googleLogin(req, res, next) {
     let user = await prisma.user.findUnique({ where: { googleSubject: identity.subject } });
     if (!user) {
       try {
-        user = await prisma.user.create({
-          data: { googleSubject: identity.subject, email: identity.email, name: identity.name, role: 'PATIENT' },
+        user = await createPatientAccount({
+          googleSubject: identity.subject, email: identity.email, name: identity.name, role: 'PATIENT',
         });
       } catch (error) {
         if (error.code !== 'P2002') throw error;

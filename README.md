@@ -207,6 +207,10 @@ Render's free API sleeps after idle periods. Allow for its first-request delay d
 
 Run `npm test` inside `backend` to check the registration API regression test locally.
 
+### Welcome emails
+
+CareSync sends a welcome email when a patient creates an account with a password or Google. In Resend, verify a sending domain and create a sending API key. Set `RESEND_API_KEY` and `WELCOME_EMAIL_FROM` on the backend. Use a sender such as `CareSync <welcome@mail.your-domain.example>` with your verified domain. The welcome email uses HTTPS on free Render and works independently of the SMTP settings for other notifications. New signups send once per account, with retries recorded in the existing email logs. Existing accounts signing in again do not trigger a welcome email.
+
 ### Google sign-in, Redis, and test checkout
 
 - **Google sign-in.** Create a Web application OAuth client in Google Cloud. Add `http://localhost:3000` and your deployed Vercel origin to its authorized JavaScript origins. Put the client ID in `GOOGLE_SIGN_IN_CLIENT_ID` on the API and in `VITE_GOOGLE_SIGN_IN_CLIENT_ID` on the frontend, then rebuild the frontend. The same button signs up new patients or signs them back in. Existing password accounts keep their original sign-in method.
