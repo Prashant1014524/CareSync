@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { Calendar, FileText, Video, User, X, ShieldAlert, Edit, Save } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import DoctorClinics from './DoctorClinics';
 
 export default function DoctorPortal() {
   const { user } = useAuth();
@@ -207,6 +208,8 @@ export default function DoctorPortal() {
         </section>
       )}
 
+      <DoctorClinics />
+
       <section aria-labelledby="appointment-overview">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="appointment-overview" className="text-lg font-bold text-slate-900">Appointment overview</h2>
@@ -232,7 +235,7 @@ export default function DoctorPortal() {
           ))}
         </div>
         {!appointmentsLoading && !appointmentsError && nextAppointment && (
-          <p className="mt-3 text-sm text-slate-600">Next appointment {new Date(nextAppointment.startTime).toLocaleString()}</p>
+          <p className="mt-3 text-sm text-slate-600">Next appointment {new Date(nextAppointment.startTime).toLocaleString([], { timeZone: nextAppointment.clinic?.timeZone || 'Asia/Kolkata' })}{nextAppointment.clinic?.name ? ` at ${nextAppointment.clinic.name}` : ''}</p>
         )}
       </section>
 
@@ -280,6 +283,7 @@ export default function DoctorPortal() {
                       </p>
                     </div>
 
+                    {app.clinic && <p className="mb-2 text-xs font-medium text-slate-600">{app.clinic.name} · {app.clinic.address}, {app.clinic.city}</p>}
                     <div className="flex items-center space-x-2">
                       <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
                         app.status === 'BOOKED' ? 'bg-sky-100 text-sky-800' :

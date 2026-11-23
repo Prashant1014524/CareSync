@@ -8,6 +8,15 @@ const { publicDoctorProfile } = require('../services/doctorListing');
 
 const VISIT_NOTE_STATUSES = ['BOOKED', 'COMPLETED'];
 
+function distanceKm(fromLat, fromLng, toLat, toLng) {
+  const radians = value => (value * Math.PI) / 180;
+  const dLat = radians(toLat - fromLat);
+  const dLng = radians(toLng - fromLng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(fromLat)) * Math.cos(radians(toLat)) * Math.sin(dLng / 2) ** 2;
+  const bounded = Math.min(1, Math.max(0, a));
+  return 6371 * 2 * Math.atan2(Math.sqrt(bounded), Math.sqrt(1 - bounded));
+}
+
 /**
  * Search Doctors by Specialization or Name
  */
@@ -15,6 +24,13 @@ async function searchDoctors(req, res, next) {
   try {
     const specialization = typeof req.query.specialization === 'string' ? req.query.specialization.trim() : '';
     const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+    const latitude = req.query.latitude === undefined ? null : Number(req.query.latitude);
+    const longitude = req.query.longitude === undefined ? null : Number(req.query.longitude);
+    if ((latitude === null) !== (longitude === null) ||
+        (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) ||
+        (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+      return res.status(400).json({ error: 'Provide a valid latitude and longitude pair.' });
+    }
 
     const whereClause = {
       role: 'DOCTOR',
@@ -32,6 +48,9 @@ async function searchDoctors(req, res, next) {
         { doctorProfile: { clinicName: { contains: query, mode: 'insensitive' } } },
         { doctorProfile: { clinicCity: { contains: query, mode: 'insensitive' } } },
         { doctorProfile: { clinicPostalCode: { contains: query } } },
+        { doctorClinics: { some: { clinic: { name: { contains: query, mode: 'insensitive' } } } } },
+        { doctorClinics: { some: { clinic: { city: { contains: query, mode: 'insensitive' } } } } },
+        { doctorClinics: { some: { clinic: { postalCode: { contains: query } } } } },
       ];
     }
 
@@ -41,11 +60,65 @@ async function searchDoctors(req, res, next) {
         id: true,
         name: true,
         doctorProfile: publicDoctorProfile,
+        doctorClinics: {
+          include: { clinic: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { name: 'asc' },
     });
 
-    res.json({ doctors });
+    const results = doctors.map(doctor => {
+      const clinics = doctor.doctorClinics.length
+        ? doctor.doctorClinics.map(assignment => ({
+          id: assignment.clinic.id,
+          name: assignment.clinic.name,
+          address: assignment.clinic.address,
+          city: assignment.clinic.city,
+          postalCode: assignment.clinic.postalCode,
+          timeZone: assignment.clinic.timeZone,
+          latitude: assignment.clinic.latitude,
+          longitude: assignment.clinic.longitude,
+          startHour: assignment.startHour,
+          endHour: assignment.endHour,
+          slotDurationMinutes: assignment.slotDurationMinutes,
+          consultationFee: assignment.consultationFee,
+          weekdays: assignment.weekdays,
+        }))
+        : [{
+          id: null,
+          name: doctor.doctorProfile?.clinicName || 'Clinic location not provided',
+          address: doctor.doctorProfile?.clinicAddress || '',
+          city: doctor.doctorProfile?.clinicCity || '',
+          postalCode: doctor.doctorProfile?.clinicPostalCode || '',
+          timeZone: 'Asia/Kolkata',
+          latitude: null,
+          longitude: null,
+          startHour: doctor.doctorProfile?.startHour || '09:00',
+          endHour: doctor.doctorProfile?.endHour || '17:00',
+          slotDurationMinutes: doctor.doctorProfile?.slotDurationMinutes || 30,
+          consultationFee: doctor.doctorProfile?.consultationFee || 50,
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+        }];
+      const rankedClinics = clinics.map(clinic => ({
+        ...clinic,
+        distanceKm: latitude === null || clinic.latitude === null || clinic.longitude === null
+          ? null : distanceKm(latitude, longitude, clinic.latitude, clinic.longitude),
+      })).sort((a, b) => {
+        if (a.distanceKm === null) return b.distanceKm === null ? a.name.localeCompare(b.name) : 1;
+        if (b.distanceKm === null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+      return { ...doctor, clinics: rankedClinics, distanceKm: rankedClinics[0]?.distanceKm ?? null };
+    });
+    if (latitude !== null) {
+      results.sort((a, b) => {
+        if (a.distanceKm === null) return b.distanceKm === null ? a.name.localeCompare(b.name) : 1;
+        if (b.distanceKm === null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+    }
+    res.json({ doctors: results });
   } catch (err) {
     next(err);
   }
@@ -57,13 +130,17 @@ async function searchDoctors(req, res, next) {
 async function getSlots(req, res, next) {
   try {
     const { doctorId } = req.params;
-    const { date } = req.query; // YYYY-MM-DD
+    const { date, clinicId } = req.query; // YYYY-MM-DD
 
     if (!date) {
       return res.status(400).json({ error: 'Date parameter (YYYY-MM-DD) is required.' });
     }
+    const parsedDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
+    if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      return res.status(400).json({ error: 'Choose a valid date in YYYY-MM-DD format.' });
+    }
 
-    const result = await getAvailableSlots(doctorId, date, req.user?.id);
+    const result = await getAvailableSlots(doctorId, date, req.user?.id, clinicId || null);
     res.json(result);
   } catch (err) {
     next(err);
@@ -75,14 +152,14 @@ async function getSlots(req, res, next) {
  */
 async function reserveSlotHold(req, res, next) {
   try {
-    const { doctorId, slotStartTime } = req.body;
+    const { doctorId, slotStartTime, clinicId } = req.body;
     const patientId = req.user.id;
 
     if (!doctorId || !slotStartTime) {
       return res.status(400).json({ error: 'doctorId and slotStartTime are required.' });
     }
 
-    const hold = await holdSlot({ doctorId, patientId, slotStartTime });
+    const hold = await holdSlot({ doctorId, patientId, slotStartTime, clinicId: clinicId || null });
     res.json({
       message: 'Slot temporarily reserved for 5 minutes.',
       hold,
@@ -97,7 +174,7 @@ async function reserveSlotHold(req, res, next) {
  */
 async function confirmBooking(req, res, next) {
   try {
-    const { doctorId, slotStartTime, symptoms, duration, severity, medicalHistory } = req.body;
+    const { doctorId, slotStartTime, clinicId, symptoms, duration, severity, medicalHistory } = req.body;
     const patientId = req.user.id;
 
     if (!doctorId || !slotStartTime || !symptoms) {
@@ -112,6 +189,7 @@ async function confirmBooking(req, res, next) {
       doctorId,
       patientId,
       slotStartTime,
+      clinicId: clinicId || null,
       symptomsData: { symptoms, duration, severity, medicalHistory },
       requirePayment,
     });
@@ -261,6 +339,7 @@ async function getPatientAppointments(req, res, next) {
       where: { patientId },
       include: {
         doctor: { select: { name: true, email: true, doctorProfile: publicDoctorProfile } },
+        clinic: true,
         symptomForm: true,
         postVisitNote: true,
         medicationReminders: true,
@@ -288,6 +367,7 @@ async function getDoctorAppointments(req, res, next) {
       where: { doctorId, status: { notIn: ['PAYMENT_PENDING', 'PAYMENT_EXPIRED'] } },
       include: {
         patient: { select: { id: true, name: true, email: true, phone: true } },
+        clinic: true,
         symptomForm: true,
         postVisitNote: true,
       },

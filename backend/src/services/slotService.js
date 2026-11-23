@@ -6,25 +6,87 @@ const { publicDoctorProfile } = require('./doctorListing');
 
 const HOLD_DURATION_MINUTES = 5;
 
+function getClinicSchedule(doctor, clinicId) {
+  const assignments = doctor.doctorClinics || [];
+  if (assignments.length) {
+    const assignment = clinicId ? assignments.find(item => item.clinicId === clinicId) : assignments[0];
+    if (!assignment) throw Object.assign(new Error('This doctor is not available at the selected clinic.'), { statusCode: 404 });
+    return { ...assignment, clinicId: assignment.clinicId, clinic: assignment.clinic, timeZone: assignment.clinic.timeZone };
+  }
+  if (clinicId) throw Object.assign(new Error('This clinic is not available for booking.'), { statusCode: 404 });
+  return { ...doctor.doctorProfile, clinicId: null, clinic: null, timeZone: 'Asia/Kolkata', weekdays: [1, 2, 3, 4, 5, 6, 7] };
+}
+
+function dateTimeParts(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]));
+}
+
+function localTimeToUtc(dateStr, timeStr, timeZone) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let candidate = target;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = dateTimeParts(new Date(candidate), timeZone);
+    const represented = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    candidate += target - represented;
+  }
+  const check = dateTimeParts(new Date(candidate), timeZone);
+  if (check.year !== year || check.month !== month || check.day !== day || check.hour !== hour || check.minute !== minute) {
+    throw Object.assign(new Error('This clinic time does not exist on the selected date because of a time-zone clock change.'), { statusCode: 409 });
+  }
+  return new Date(candidate);
+}
+
+function clinicLocalDate(date, timeZone) {
+  const parts = dateTimeParts(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+}
+
+function validateScheduledSlot(startTime, schedule) {
+  if (!Number.isFinite(startTime.getTime())) throw Object.assign(new Error('Choose a valid appointment time.'), { statusCode: 400 });
+  if (startTime <= new Date()) throw Object.assign(new Error('Choose a future appointment time.'), { statusCode: 409 });
+  const local = dateTimeParts(startTime, schedule.timeZone || 'Asia/Kolkata');
+  const dateStr = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
+  const weekday = new Date(`${dateStr}T12:00:00.000Z`).getUTCDay() || 7;
+  const dayStart = localTimeToUtc(dateStr, schedule.startHour, schedule.timeZone || 'Asia/Kolkata');
+  const dayEnd = localTimeToUtc(dateStr, schedule.endHour, schedule.timeZone || 'Asia/Kolkata');
+  const durationMs = schedule.slotDurationMinutes * 60000;
+  if (!schedule.weekdays.includes(weekday) || startTime < dayStart ||
+      startTime >= dayEnd || (startTime.getTime() - dayStart.getTime()) % durationMs !== 0 ||
+      startTime.getTime() + durationMs > dayEnd.getTime()) {
+    throw Object.assign(new Error('Choose a time within this clinic’s published schedule.'), { statusCode: 409 });
+  }
+}
+
 /**
  * Get Available Slots for a Doctor on a specific date (YYYY-MM-DD)
  */
-async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
+async function getAvailableSlots(doctorId, dateStr, currentPatientId = null, clinicId = null) {
   const doctor = await prisma.user.findUnique({
     where: { id: doctorId },
-    include: { doctorProfile: true },
+    include: { doctorProfile: true, doctorClinics: { include: { clinic: true } } },
   });
 
   if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
     throw Object.assign(new Error('Doctor is unavailable for booking.'), { statusCode: 404 });
   }
 
-  // Check Doctor Leave
+  const schedule = getClinicSchedule(doctor, clinicId);
+  const { startHour, endHour, slotDurationMinutes, weekdays } = schedule;
+  const clinicDate = dateStr;
+
+  // Check Doctor Leave for the clinic's local calendar date.
   const leave = await prisma.doctorLeave.findUnique({
     where: {
       doctorId_leaveDate: {
         doctorId,
-        leaveDate: dateStr,
+        leaveDate: clinicDate,
       },
     },
   });
@@ -33,7 +95,10 @@ async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
     return { isDoctorOnLeave: true, leaveReason: leave.reason || 'Doctor on leave', slots: [] };
   }
 
-  const { startHour, endHour, slotDurationMinutes } = doctor.doctorProfile;
+  const requestedWeekday = new Date(`${dateStr}T12:00:00.000Z`).getUTCDay() || 7;
+  if (!weekdays.includes(requestedWeekday)) {
+    return { isDoctorOnLeave: false, isClinicClosed: true, clinic: schedule.clinic, slots: [] };
+  }
   const now = new Date();
 
   // Clean up expired slot holds first
@@ -41,12 +106,10 @@ async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
     where: { expiresAt: { lt: now } },
   });
 
-  // Calculate start and end of day in UTC
-  const [startH, startM] = startHour.split(':').map(Number);
-  const [endH, endM] = endHour.split(':').map(Number);
-
-  const dayStart = new Date(`${dateStr}T${startHour}:00.000Z`);
-  const dayEnd = new Date(`${dateStr}T${endHour}:00.000Z`);
+  // Convert the clinic's wall-clock hours into instants for database lookups.
+  const timeZone = schedule.timeZone || 'Asia/Kolkata';
+  const dayStart = localTimeToUtc(dateStr, startHour, timeZone);
+  const dayEnd = localTimeToUtc(dateStr, endHour, timeZone);
 
   // Fetch existing appointments for the day
   const existingAppointments = await prisma.appointment.findMany({
@@ -105,25 +168,27 @@ async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
     currentSlotStart = currentSlotEnd;
   }
 
-  return { isDoctorOnLeave: false, slots };
+  return { isDoctorOnLeave: false, isClinicClosed: false, clinic: schedule.clinic, slots };
 }
 
 /**
  * Temporarily hold a slot for 5 minutes during patient checkout
  */
-async function holdSlot({ doctorId, patientId, slotStartTime }) {
+async function holdSlot({ doctorId, patientId, slotStartTime, clinicId }) {
   const now = new Date();
   const startTime = new Date(slotStartTime);
   const doctor = await prisma.user.findUnique({
     where: { id: doctorId },
-    include: { doctorProfile: true },
+    include: { doctorProfile: true, doctorClinics: { include: { clinic: true } } },
   });
 
   if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
     throw new Error('Doctor is unavailable for booking.');
   }
 
-  const slotDuration = doctor.doctorProfile.slotDurationMinutes;
+  const schedule = getClinicSchedule(doctor, clinicId);
+  validateScheduledSlot(startTime, schedule);
+  const slotDuration = schedule.slotDurationMinutes;
   const endTime = new Date(startTime.getTime() + slotDuration * 60000);
   const expiresAt = new Date(now.getTime() + HOLD_DURATION_MINUTES * 60000);
 
@@ -160,12 +225,12 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
     if (existingHold) {
       return tx.slotHold.update({
         where: { id: existingHold.id },
-        data: { slotEndTime: endTime, expiresAt },
+        data: { clinicId: schedule.clinicId, slotEndTime: endTime, expiresAt },
       });
     }
 
     return tx.slotHold.create({
-      data: { doctorId, patientId, slotStartTime: startTime, slotEndTime: endTime, expiresAt },
+      data: { doctorId, patientId, clinicId: schedule.clinicId, slotStartTime: startTime, slotEndTime: endTime, expiresAt },
     });
   });
 
@@ -179,7 +244,7 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
 /**
  * Confirm & Book Slot with Double-Booking Prevention (Atomic DB Transaction)
  */
-async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsData, requirePayment = false }) {
+async function bookAppointment({ doctorId, patientId, slotStartTime, clinicId, symptomsData, requirePayment = false }) {
   const now = new Date();
   const startTime = new Date(slotStartTime);
 
@@ -191,14 +256,16 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
     // Check doctor profile
     const doctor = await tx.user.findUnique({
       where: { id: doctorId },
-      include: { doctorProfile: true },
+      include: { doctorProfile: true, doctorClinics: { include: { clinic: true } } },
     });
 
     if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
       throw Object.assign(new Error('Doctor is unavailable for booking.'), { statusCode: 404 });
     }
 
-    const dateStr = startTime.toISOString().split('T')[0];
+    const schedule = getClinicSchedule(doctor, clinicId);
+    validateScheduledSlot(startTime, schedule);
+    const dateStr = clinicLocalDate(startTime, schedule.timeZone || 'Asia/Kolkata');
 
     // Verify doctor is not on leave
     const leave = await tx.doctorLeave.findUnique({
@@ -227,7 +294,7 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
       throw new Error('DOUBLE_BOOKING_PREVENTED: This slot was just booked by another user. Please select another slot.');
     }
 
-    const slotEndTime = new Date(startTime.getTime() + doctor.doctorProfile.slotDurationMinutes * 60000);
+    const slotEndTime = new Date(startTime.getTime() + schedule.slotDurationMinutes * 60000);
     let payment;
     if (requirePayment) {
       const expiresAt = new Date(Date.now() + 20 * 60000);
@@ -235,11 +302,11 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
         throw Object.assign(new Error('Choose a slot at least 20 minutes from now.'), { statusCode: 409 });
       }
       const hold = await tx.slotHold.findFirst({
-        where: { doctorId, patientId, slotStartTime: startTime, expiresAt: { gt: new Date() } },
+        where: { doctorId, patientId, clinicId: schedule.clinicId, slotStartTime: startTime, expiresAt: { gt: new Date() } },
       });
-      const { startHour, endHour, slotDurationMinutes, consultationFee } = doctor.doctorProfile;
-      const dayStart = new Date(`${dateStr}T${startHour}:00.000Z`);
-      const dayEnd = new Date(`${dateStr}T${endHour}:00.000Z`);
+      const { startHour, endHour, slotDurationMinutes, consultationFee } = schedule;
+      const dayStart = localTimeToUtc(dateStr, startHour, schedule.timeZone || 'Asia/Kolkata');
+      const dayEnd = localTimeToUtc(dateStr, endHour, schedule.timeZone || 'Asia/Kolkata');
       const aligned = (startTime - dayStart) % (slotDurationMinutes * 60000) === 0;
       if (!hold || !aligned || startTime < dayStart || slotEndTime > dayEnd) {
         throw Object.assign(new Error('Select an available slot and reserve it again.'), { statusCode: 409 });
@@ -256,6 +323,7 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
       data: {
         doctorId,
         patientId,
+        clinicId: schedule.clinicId,
         startTime,
         endTime: slotEndTime,
         status: requirePayment ? 'PAYMENT_PENDING' : 'BOOKED',
@@ -315,6 +383,7 @@ async function notifyBooking(appointment, preVisitSummary) {
     include: {
       doctor: { select: { name: true, email: true, doctorProfile: publicDoctorProfile } },
       patient: { select: { name: true, email: true } },
+      clinic: true,
       symptomForm: true,
     },
   });
@@ -352,4 +421,6 @@ module.exports = {
   holdSlot,
   bookAppointment,
   notifyBooking,
+  clinicLocalDate,
+  localTimeToUtc,
 };

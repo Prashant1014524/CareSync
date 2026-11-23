@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Search, Calendar, Clock, Stethoscope, AlertTriangle, CheckCircle, Video, FileText, Pill, ShieldAlert, X } from 'lucide-react';
+import { Search, Calendar, Clock, Stethoscope, AlertTriangle, CheckCircle, Video, FileText, Pill, ShieldAlert, X, MapPin } from 'lucide-react';
 
-function ClinicLocation({ profile }) {
-  if (!profile?.clinicName) return null;
+function ClinicLocation({ clinic }) {
+  if (!clinic?.name) return null;
   return (
     <div className="text-xs text-slate-600">
-      <p className="font-semibold text-slate-800">{profile.clinicName}</p>
-      <p>{[profile.clinicAddress, profile.clinicCity, profile.clinicPostalCode].filter(Boolean).join(', ')}</p>
+      <p className="font-semibold text-slate-800">{clinic.name}</p>
+      {(clinic.address || clinic.city || clinic.postalCode) && <p>{[clinic.address, clinic.city, clinic.postalCode].filter(Boolean).join(', ')}</p>}
+      {clinic.distanceKm !== null && clinic.distanceKm !== undefined && <p className="mt-1 inline-flex items-center gap-1 font-medium text-emerald-700"><MapPin className="h-3 w-3" />{clinic.distanceKm < 10 ? clinic.distanceKm.toFixed(1) : Math.round(clinic.distanceKm)} km away</p>}
     </div>
   );
 }
@@ -17,11 +18,15 @@ export default function PatientPortal() {
   const [searchQuery, setSearchQuery] = useState('');
   const [specialization, setSpecialization] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedClinic, setSelectedClinic] = useState(null);
+  const [patientLocation, setPatientLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('');
   
   // Booking modal state
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().split('T')[0]);
   const [slots, setSlots] = useState([]);
   const [isDoctorOnLeave, setIsDoctorOnLeave] = useState(false);
+  const [isClinicClosed, setIsClinicClosed] = useState(false);
   const [leaveReason, setLeaveReason] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [holdTimer, setHoldTimer] = useState(null); // seconds left
@@ -79,10 +84,10 @@ export default function PatientPortal() {
     }
   };
 
-  const fetchDoctors = async () => {
+  const fetchDoctors = async (location = patientLocation) => {
     try {
       const res = await api.get(`/appointments/doctors/search`, {
-        params: { query: searchQuery, specialization },
+        params: { query: searchQuery, specialization, ...(location || {}) },
       });
       setDoctors(res.data.doctors);
     } catch (err) {
@@ -108,25 +113,31 @@ export default function PatientPortal() {
     }
   };
 
-  const fetchSlots = async (docId, dateStr) => {
+  const fetchSlots = async (docId, dateStr, clinicId) => {
     try {
       const res = await api.get(`/appointments/doctors/${docId}/slots`, {
-        params: { date: dateStr },
+        params: { date: dateStr, ...(clinicId ? { clinicId } : {}) },
       });
       setIsDoctorOnLeave(res.data.isDoctorOnLeave);
-      setLeaveReason(res.data.leaveReason || '');
+      setIsClinicClosed(res.data.isClinicClosed || false);
+      setLeaveReason(res.data.leaveReason || (res.data.isClinicClosed ? 'This clinic is closed on the selected day.' : ''));
       setSlots(res.data.slots || []);
     } catch (err) {
       console.error('Error fetching slots:', err);
     }
   };
 
-  const handleSelectDoctor = (doc) => {
+  const handleSelectDoctor = (doc, clinic) => {
+    const clinicDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: clinic.timeZone || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    setBookingDate(clinicDate);
     setSelectedDoctor(doc);
+    setSelectedClinic(clinic);
     setSelectedSlot(null);
     setHoldTimer(null);
     setBookingError(null);
-    fetchSlots(doc.id, bookingDate);
+    fetchSlots(doc.id, clinicDate, clinic.id);
   };
 
   const handleDateChange = (e) => {
@@ -135,7 +146,7 @@ export default function PatientPortal() {
     setSelectedSlot(null);
     setHoldTimer(null);
     if (selectedDoctor) {
-      fetchSlots(selectedDoctor.id, dateVal);
+      fetchSlots(selectedDoctor.id, dateVal, selectedClinic?.id);
     }
   };
 
@@ -144,6 +155,7 @@ export default function PatientPortal() {
       setBookingError(null);
       const res = await api.post('/appointments/hold-slot', {
         doctorId: selectedDoctor.id,
+        clinicId: selectedClinic?.id || null,
         slotStartTime: slot.startTime,
       });
       setSelectedSlot(slot);
@@ -178,6 +190,7 @@ export default function PatientPortal() {
     try {
       const { data } = await api.post('/appointments/book', {
         doctorId: selectedDoctor.id,
+        clinicId: selectedClinic?.id || null,
         slotStartTime: selectedSlot.startTime,
         symptoms,
         duration,
@@ -201,6 +214,24 @@ export default function PatientPortal() {
     } finally {
       setBookingLoading(false);
     }
+  };
+
+  const useMyLocation = () => {
+    setLocationStatus('');
+    if (!navigator.geolocation) {
+      setLocationStatus('Location is unavailable in this browser. Search by city or PIN code instead.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const location = { latitude: coords.latitude, longitude: coords.longitude };
+        setPatientLocation(location);
+        setLocationStatus('Showing clinics nearest to your location.');
+        fetchDoctors(location);
+      },
+      () => setLocationStatus('Location access was not granted. Search by city or PIN code instead.'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
   };
 
   const toggleReminder = async (remId, currentStatus) => {
@@ -279,12 +310,16 @@ export default function PatientPortal() {
             >
               Search
             </button>
+            <button type="button" onClick={useMyLocation} className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-200 px-4 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-50">
+              <MapPin className="h-4 w-4" /> Near me
+            </button>
+            {locationStatus && <p role="status" className="basis-full text-xs text-slate-600">{locationStatus}</p>}
           </div>
 
           {/* Doctors List Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {doctors.map((doc) => (
-              <div key={doc.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition space-y-4">
+            {doctors.flatMap(doc => doc.clinics.map(clinic => ({ doc, clinic }))).map(({ doc, clinic }) => (
+              <div key={`${doc.id}-${clinic.id || 'legacy'}`} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition space-y-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">{doc.name}</h3>
@@ -293,21 +328,22 @@ export default function PatientPortal() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-slate-900">₹{doc.doctorProfile?.consultationFee ?? 50}</span>
+                    <span className="text-lg font-bold text-slate-900">₹{clinic.consultationFee ?? doc.doctorProfile?.consultationFee ?? 50}</span>
                     <span className="text-xs text-slate-500 block">/ visit</span>
                   </div>
                 </div>
 
-                <ClinicLocation profile={doc.doctorProfile} />
+                <ClinicLocation clinic={clinic} />
                 {doc.doctorProfile?.bio && <p className="line-clamp-2 text-xs text-slate-600">{doc.doctorProfile.bio}</p>}
 
                 <div className="text-xs text-slate-500 space-y-1 border-t border-slate-100 pt-3">
-                  <p><strong>Hours:</strong> {doc.doctorProfile?.startHour} - {doc.doctorProfile?.endHour}</p>
-                  <p><strong>Slot Duration:</strong> {doc.doctorProfile?.slotDurationMinutes} mins</p>
+                  <p><strong>Hours:</strong> {clinic.startHour} - {clinic.endHour} {clinic.timeZone || ''}</p>
+                  <p><strong>Slot Duration:</strong> {clinic.slotDurationMinutes} mins</p>
+                  <p><strong>Days:</strong> {clinic.weekdays.map(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1]).join(', ')}</p>
                 </div>
 
                 <button
-                  onClick={() => handleSelectDoctor(doc)}
+                  onClick={() => handleSelectDoctor(doc, clinic)}
                   className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm py-2.5 rounded-lg shadow-sm transition flex items-center justify-center space-x-2"
                 >
                   <Calendar className="w-4 h-4" />
@@ -328,8 +364,8 @@ export default function PatientPortal() {
             <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Book Appointment with {selectedDoctor.name}</h2>
-                <ClinicLocation profile={selectedDoctor.doctorProfile} />
-                <p className="text-xs text-slate-500">{selectedDoctor.doctorProfile?.specialization} • ₹{selectedDoctor.doctorProfile?.consultationFee}</p>
+                <ClinicLocation clinic={selectedClinic} />
+                <p className="text-xs text-slate-500">{selectedDoctor.doctorProfile?.specialization} • ₹{selectedClinic?.consultationFee}</p>
               </div>
               <button onClick={() => setSelectedDoctor(null)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-6 h-6" />
@@ -348,7 +384,7 @@ export default function PatientPortal() {
               <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Select Date</label>
               <input
                 type="date"
-                min={new Date().toISOString().split('T')[0]}
+                min={new Intl.DateTimeFormat('en-CA', { timeZone: selectedClinic?.timeZone || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())}
                 value={bookingDate}
                 onChange={handleDateChange}
                 className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500"
@@ -356,10 +392,10 @@ export default function PatientPortal() {
             </div>
 
             {/* Doctor Leave Warning */}
-            {isDoctorOnLeave ? (
+            {isDoctorOnLeave || isClinicClosed ? (
               <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-xs text-amber-800">
-                <p className="font-bold">Doctor on Leave</p>
-                <p>Doctor is unavailable on this date ({leaveReason}). Please select another date.</p>
+                <p className="font-bold">{isDoctorOnLeave ? 'Doctor on Leave' : 'Clinic Closed'}</p>
+                <p>{isDoctorOnLeave ? `Doctor is unavailable on this date (${leaveReason}). Please select another date.` : leaveReason}</p>
               </div>
             ) : (
               <div>
@@ -380,7 +416,7 @@ export default function PatientPortal() {
                             : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed line-through'
                         }`}
                       >
-                        {new Date(slot.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(slot.startTime).toLocaleTimeString([], { timeZone: selectedClinic?.timeZone || 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                       </button>
                     );
                   })}
@@ -481,8 +517,8 @@ export default function PatientPortal() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
                   <div>
                     <h3 className="font-bold text-slate-900 text-base">Dr. {app.doctor?.name}</h3>
-                    <ClinicLocation profile={app.doctor?.doctorProfile} />
-                    <p className="text-xs text-slate-500">{app.doctor?.doctorProfile?.specialization} • {new Date(app.startTime).toLocaleString()}</p>
+                    <ClinicLocation clinic={app.clinic || (app.doctor?.doctorProfile?.clinicName ? { name: app.doctor.doctorProfile.clinicName, address: app.doctor.doctorProfile.clinicAddress, city: app.doctor.doctorProfile.clinicCity, postalCode: app.doctor.doctorProfile.clinicPostalCode } : null)} />
+                    <p className="text-xs text-slate-500">{app.doctor?.doctorProfile?.specialization} • {new Date(app.startTime).toLocaleString([], { timeZone: app.clinic?.timeZone || 'Asia/Kolkata' })}</p>
                   </div>
 
                   <div className="flex items-center space-x-2">

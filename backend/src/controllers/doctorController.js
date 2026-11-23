@@ -8,7 +8,7 @@ async function getProfile(req, res, next) {
     const doctorId = req.user.id;
     const doctor = await prisma.user.findUnique({
       where: { id: doctorId },
-      include: { doctorProfile: true },
+      include: { doctorProfile: true, doctorClinics: { include: { clinic: true }, orderBy: { createdAt: 'asc' } } },
     });
 
     if (!doctor || doctor.role !== 'DOCTOR') {
@@ -63,9 +63,26 @@ async function updateProfile(req, res, next) {
       },
     });
 
+    const primaryClinic = await prisma.doctorClinic.findFirst({
+      where: { doctorId },
+      orderBy: { createdAt: 'asc' },
+      select: { clinicId: true },
+    });
+    if (primaryClinic) {
+      await prisma.doctorClinic.update({
+        where: { doctorId_clinicId: { doctorId, clinicId: primaryClinic.clinicId } },
+        data: {
+          startHour: startHour || undefined,
+          endHour: endHour || undefined,
+          slotDurationMinutes: slotDurationMinutes ? Number(slotDurationMinutes) : undefined,
+          consultationFee: consultationFee !== undefined ? Number(consultationFee) : undefined,
+        },
+      });
+    }
+
     const updatedUser = await prisma.user.findUnique({
       where: { id: doctorId },
-      include: { doctorProfile: true },
+      include: { doctorProfile: true, doctorClinics: { include: { clinic: true }, orderBy: { createdAt: 'asc' } } },
     });
 
     const { passwordHash, ...doctor } = updatedUser;

@@ -1,6 +1,6 @@
 const prisma = require('../prisma');
 const razorpay = require('./razorpay.mts');
-const { notifyBooking } = require('./slotService');
+const { notifyBooking, clinicLocalDate } = require('./slotService');
 
 async function reconcilePayment(payment, link) {
   if (payment.appointment.status !== 'PAYMENT_PENDING') return payment.appointment.status;
@@ -30,7 +30,7 @@ async function reconcilePayment(payment, link) {
     const leave = paidAt && await tx.doctorLeave.findUnique({
       where: { doctorId_leaveDate: {
         doctorId: appointment.doctorId,
-        leaveDate: appointment.startTime.toISOString().slice(0, 10),
+        leaveDate: clinicLocalDate(appointment.startTime, appointment.clinic?.timeZone || 'Asia/Kolkata'),
       } },
     });
     if (leave) status = 'CANCELLED';
@@ -59,7 +59,7 @@ async function reconcilePayment(payment, link) {
 }
 
 function loadPayment(appointmentId) {
-  return prisma.bookingPayment.findUnique({ where: { appointmentId }, include: { appointment: true } });
+  return prisma.bookingPayment.findUnique({ where: { appointmentId }, include: { appointment: { include: { clinic: true } } } });
 }
 
 async function resolveLink(payment) {

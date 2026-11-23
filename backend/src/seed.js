@@ -27,6 +27,8 @@ async function seed() {
   await prisma.symptomForm.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.slotHold.deleteMany();
+  await prisma.doctorClinic.deleteMany();
+  await prisma.clinic.deleteMany();
   await prisma.doctorLeave.deleteMany();
   await prisma.doctorProfile.deleteMany();
   await prisma.emailLog.deleteMany();
@@ -132,6 +134,31 @@ async function seed() {
     include: { doctorProfile: true },
   });
 
+  const cardioClinic = await prisma.clinic.create({
+    data: { name: 'CareSync Heart Clinic', address: '12 Connaught Place', city: 'New Delhi', postalCode: '110001', latitude: 28.6315, longitude: 77.2167 },
+  });
+  const cardioClinicSouth = await prisma.clinic.create({
+    data: { name: 'CareSync Heart Clinic South', address: '44 Green Park Main', city: 'New Delhi', postalCode: '110016', latitude: 28.5581, longitude: 77.2066 },
+  });
+  const neuroClinic = await prisma.clinic.create({
+    data: { name: 'CareSync Neuro Center', address: '25 Karol Bagh', city: 'New Delhi', postalCode: '110005', latitude: 28.6517, longitude: 77.1909 },
+  });
+  const pediatricClinic = await prisma.clinic.create({
+    data: { name: 'CareSync Children’s Clinic', address: '8 Lajpat Nagar', city: 'New Delhi', postalCode: '110024', latitude: 28.5677, longitude: 77.2433 },
+  });
+  const dermatologyClinic = await prisma.clinic.create({
+    data: { name: 'CareSync Skin Clinic', address: '19 Rohini Sector 9', city: 'New Delhi', postalCode: '110085', latitude: 28.7142, longitude: 77.1172 },
+  });
+  await prisma.doctorClinic.createMany({
+    data: [
+      { doctorId: docCardio.id, clinicId: cardioClinic.id, startHour: '08:30', endHour: '16:30', slotDurationMinutes: 30, consultationFee: 140, weekdays: [1, 2, 3, 4, 5] },
+      { doctorId: docCardio.id, clinicId: cardioClinicSouth.id, startHour: '10:00', endHour: '17:00', slotDurationMinutes: 30, consultationFee: 160, weekdays: [2, 4, 6] },
+      { doctorId: docNeuro.id, clinicId: neuroClinic.id, startHour: '09:00', endHour: '17:00', slotDurationMinutes: 45, consultationFee: 160, weekdays: [1, 2, 3, 4, 5] },
+      { doctorId: docPeds.id, clinicId: pediatricClinic.id, startHour: '08:00', endHour: '15:00', slotDurationMinutes: 30, consultationFee: 95, weekdays: [1, 2, 3, 4, 5, 6] },
+      { doctorId: docDerm.id, clinicId: dermatologyClinic.id, startHour: '10:00', endHour: '18:00', slotDurationMinutes: 30, consultationFee: 130, weekdays: [1, 2, 3, 4, 5, 6] },
+    ],
+  });
+
   // 3. Create Patients
   const patient1 = await prisma.user.create({
     data: {
@@ -167,6 +194,7 @@ async function seed() {
     data: {
       doctorId: docCardio.id,
       patientId: patient1.id,
+      clinicId: cardioClinic.id,
       startTime: tomorrow,
       endTime: slotEndTime,
       status: 'BOOKED',
@@ -202,6 +230,7 @@ async function seed() {
     data: {
       doctorId: docNeuro.id,
       patientId: patient2.id,
+      clinicId: neuroClinic.id,
       startTime: pastDate,
       endTime: pastEndTime,
       status: 'COMPLETED',

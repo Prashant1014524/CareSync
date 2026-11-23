@@ -20,6 +20,7 @@ model User {
   updatedAt    DateTime      @updatedAt
 
   doctorProfile       DoctorProfile?
+  doctorClinics       DoctorClinic[]
   doctorAppointments  Appointment[]  @relation("DoctorAppointments")
   patientAppointments Appointment[]  @relation("PatientAppointments")
   doctorLeaves        DoctorLeave[]
@@ -60,6 +61,45 @@ model DoctorProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model Clinic {
+  id         String   @id @default(uuid())
+  name       String
+  address    String
+  city       String
+  postalCode String
+  timeZone   String   @default("Asia/Kolkata")
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  doctors      DoctorClinic[]
+  appointments Appointment[]
+  slotHolds    SlotHold[]
+
+  @@index([city])
+  @@index([postalCode])
+}
+
+model DoctorClinic {
+  id                  String   @id @default(uuid())
+  doctorId            String
+  clinicId            String
+  startHour           String   @default("09:00")
+  endHour             String   @default("17:00")
+  slotDurationMinutes Int      @default(30)
+  consultationFee     Float    @default(50.0)
+  weekdays            Int[]    @default([1, 2, 3, 4, 5])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  doctor User   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, clinicId])
+  @@index([clinicId])
+}
+
 enum DoctorListingStatus {
   PENDING
   APPROVED
@@ -82,20 +122,24 @@ model SlotHold {
   id            String   @id @default(uuid())
   doctorId      String
   patientId     String
+  clinicId      String?
   slotStartTime DateTime
   slotEndTime   DateTime
   expiresAt     DateTime
   createdAt     DateTime @default(now())
 
   patient User @relation("PatientSlotHolds", fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic? @relation(fields: [clinicId], references: [id], onDelete: SetNull)
 
   @@unique([doctorId, slotStartTime])
+  @@index([clinicId])
 }
 
 model Appointment {
   id             String   @id @default(uuid())
   doctorId       String
   patientId      String
+  clinicId       String?
   startTime      DateTime
   endTime        DateTime
   status         String   @default("BOOKED") // Also PAYMENT_PENDING and PAYMENT_EXPIRED
@@ -107,6 +151,7 @@ model Appointment {
 
   doctor  User @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
   patient User @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic? @relation(fields: [clinicId], references: [id], onDelete: SetNull)
 
   symptomForm         SymptomForm?
   postVisitNote       PostVisitNote?
@@ -115,6 +160,7 @@ model Appointment {
 
   // The migration adds a partial unique index for appointments that occupy a slot.
   @@index([doctorId, startTime])
+  @@index([clinicId])
 }
 
 model BookingPayment {

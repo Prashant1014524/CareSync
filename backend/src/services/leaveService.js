@@ -1,6 +1,7 @@
 const prisma = require('../prisma');
 const { sendEmail, getCancellationTemplate } = require('./emailService');
 const { deleteCalendarEvent } = require('./calendarService');
+const { clinicLocalDate, localTimeToUtc } = require('./slotService');
 
 /**
  * Mark Doctor Leave and process cancellations for affected bookings
@@ -32,25 +33,41 @@ async function markDoctorLeave({ doctorId, leaveDate, reason }) {
   });
 
   // 2. Find affected appointments on leaveDate
-  const dayStart = new Date(`${leaveDate}T00:00:00.000Z`);
-  const dayEnd = new Date(`${leaveDate}T23:59:59.999Z`);
+  const nextDate = new Date(`${leaveDate}T12:00:00.000Z`);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  const nextDateString = nextDate.toISOString().slice(0, 10);
+  const clinicAssignments = await prisma.doctorClinic.findMany({
+    where: { doctorId },
+    select: { clinic: { select: { timeZone: true } } },
+  });
+  const timeZones = [...new Set(clinicAssignments.map(item => item.clinic.timeZone).concat('Asia/Kolkata'))];
+  const dayRanges = timeZones.map(timeZone => ({
+    start: localTimeToUtc(leaveDate, '00:00', timeZone),
+    end: localTimeToUtc(nextDateString, '00:00', timeZone),
+  }));
+  const rangeStart = new Date(Math.min(...dayRanges.map(range => range.start.getTime())));
+  const rangeEnd = new Date(Math.max(...dayRanges.map(range => range.end.getTime())));
 
   const affectedAppointments = await prisma.appointment.findMany({
     where: {
       doctorId,
       status: 'BOOKED',
-      startTime: { gte: dayStart, lte: dayEnd },
+      startTime: { gte: rangeStart, lt: rangeEnd },
     },
     include: {
       patient: true,
       doctor: true,
+      clinic: true,
     },
   });
+  const affectedForLocalDate = affectedAppointments.filter(app =>
+    clinicLocalDate(app.startTime, app.clinic?.timeZone || 'Asia/Kolkata') === leaveDate
+  );
 
   let cancelledCount = 0;
 
   // 3. Process each affected appointment
-  for (const app of affectedAppointments) {
+  for (const app of affectedForLocalDate) {
     // Update DB status to CANCELLED
     const updated = await prisma.appointment.updateMany({
       where: { id: app.id, status: 'BOOKED' },
@@ -74,7 +91,7 @@ async function markDoctorLeave({ doctorId, leaveDate, reason }) {
     const cancelHtml = getCancellationTemplate({
       recipientName: app.patient.name,
       doctorName: app.doctor.name,
-      dateStr: new Date(app.startTime).toLocaleString(),
+      dateStr: new Date(app.startTime).toLocaleString('en-IN', { timeZone: app.clinic?.timeZone || 'Asia/Kolkata' }),
       reason: reason || 'Doctor marked on leave',
     });
 
@@ -87,12 +104,15 @@ async function markDoctorLeave({ doctorId, leaveDate, reason }) {
   }
 
   // 4. Remove active slot holds on leave date
-  await prisma.slotHold.deleteMany({
+  const holds = await prisma.slotHold.findMany({
     where: {
       doctorId,
-      slotStartTime: { gte: dayStart, lte: dayEnd },
+      slotStartTime: { gte: rangeStart, lt: rangeEnd },
     },
+    include: { clinic: true },
   });
+  const holdIds = holds.filter(hold => clinicLocalDate(hold.slotStartTime, hold.clinic?.timeZone || 'Asia/Kolkata') === leaveDate).map(hold => hold.id);
+  if (holdIds.length) await prisma.slotHold.deleteMany({ where: { id: { in: holdIds } } });
 
   return {
     leave,

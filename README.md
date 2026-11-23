@@ -35,7 +35,7 @@ Create the first administrator with `npm run admin:create` in `backend`. In the 
 
 ### Doctor practice listings
 
-Doctors can select **List your practice** on the homepage and submit their specialty, medical registration number, clinic address, and visit fee. An admin reviews the application under **Practice applications**. A doctor can sign in and track the application. Patients can find and book approved practices by name, specialty, city, or PIN code, and the booking displays the clinic address. Medical registration numbers are available to the applicant and admin for review.
+Doctors can select **List your practice** on the homepage and submit their specialty, medical registration number, clinic address, clinic hours, working days, appointment length, and visit fee. They can use their device location while at the clinic (or enter coordinates) so CareSync can calculate distance. An admin reviews the application under **Practice applications**. After signing in, a doctor can add clinic branches and configure a separate schedule and fee for each branch. Patients can opt in to **Near me** search; CareSync ranks clinics by straight-line distance and shows the distance and clinic address. Without location access, patients can still search by doctor, specialty, city, clinic, or PIN code. Time slots use the selected clinic's time zone. Medical registration numbers remain available only to the applicant and admin for review.
 
 ---
 
@@ -187,13 +187,18 @@ If the Gemini API key is omitted, quota is exceeded, or parsing fails, the syste
 - `GET /api/auth/profile`: Fetch active user profile.
 
 ### Appointment Routes
-- `GET /api/appointments/doctors/search`: Search doctors by specialization/query.
-- `GET /api/appointments/doctors/:doctorId/slots?date=YYYY-MM-DD`: Get available slots, hold statuses, and leave info.
+- `GET /api/appointments/doctors/search?latitude=...&longitude=...`: Search and rank approved clinics by distance from an optional patient location.
+- `GET /api/appointments/doctors/:doctorId/slots?date=YYYY-MM-DD&clinicId=...`: Get clinic-specific slots, hold statuses, and leave info.
 - `POST /api/appointments/hold-slot`: Reserve 5-minute temporary hold on slot.
 - `POST /api/appointments/book`: Atomically book appointment with pre-visit AI summary.
 - `GET /api/appointments/patient`: View patient appointments.
 - `GET /api/appointments/doctor`: View doctor appointments with AI urgency levels.
 - `POST /api/appointments/:appointmentId/post-visit`: Doctor submits clinical notes -> triggers LLM post-visit summary & medication reminders.
+
+### Doctor clinic management
+- `GET /api/doctor/clinics`: List the signed-in doctor's clinic branches and schedules.
+- `POST /api/doctor/clinics`: Add a clinic, coordinates, time zone, working days, hours, slot length, and fee.
+- `PUT /api/doctor/clinics/:clinicId`: Update a clinic branch and its schedule.
 
 ### Doctor Leave Routes
 - `POST /api/leave/mark`: Mark doctor leave for date, automatically cancels affected bookings & notifies patients.

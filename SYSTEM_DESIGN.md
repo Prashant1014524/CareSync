@@ -19,6 +19,16 @@ When the patient submits the symptom form to finalize booking, the backend execu
 
 ---
 
+## 2.1 Clinic Locations, Distance, and Branch Schedules
+
+- `Clinic` stores a practice address, optional latitude/longitude, and an IANA time-zone name. Existing doctor listings are migrated into a clinic record without requiring new credentials.
+- `DoctorClinic` links a doctor to a clinic and stores that branch's working days, local opening/closing hours, appointment length, and consultation fee.
+- A doctor can add and update branches from the doctor portal. A patient can grant browser location access to request nearby ordering; the API computes Haversine distance in kilometers and sorts clinics by nearest first. Without coordinates or consent, normal text search remains available.
+- The selected clinic ID is sent through slot lookup, hold, and booking. Schedule validation converts clinic wall-clock hours to UTC instants using the clinic time zone. Appointment records retain the chosen clinic so both patient and doctor portals show where the visit will occur.
+- The booking uniqueness constraint remains doctor-and-time based: one doctor cannot be booked at two branches at the same instant.
+
+---
+
 ## 3. Doctor Leave Conflict Handling
 When an Admin or Doctor marks a date as leave (`YYYY-MM-DD`), the platform executes an automated cascade workflow:
 
