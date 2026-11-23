@@ -14,7 +14,7 @@ try {
       'backend\\src',
       'backend\\prisma',
       'backend\\package.json',
-      'backend\\.env',
+      'backend\\.env.example',
       'frontend\\src',
       'frontend\\package.json',
       'frontend\\index.html',
