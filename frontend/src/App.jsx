@@ -5,6 +5,7 @@ import PatientPortal from './components/PatientPortal';
 import DoctorPortal from './components/DoctorPortal';
 import AdminPortal from './components/AdminPortal';
 import AuthModal from './components/AuthModal';
+import DoctorListingForm from './components/DoctorListingForm';
 import { HeartPulse, Stethoscope, ShieldCheck, ArrowRight } from 'lucide-react';
 
 function DashboardSwitcher({ onOpenAuth }) {
@@ -26,13 +27,16 @@ function DashboardSwitcher({ onOpenAuth }) {
           CareSync connects patients and doctors with AI pre-visit urgency summaries, race-condition protected booking, automatic doctor leave conflict handling, and Google Calendar integration.
         </p>
 
-        <div className="flex justify-center space-x-4">
+        <div className="flex flex-wrap justify-center gap-3">
           <button
             onClick={() => onOpenAuth('register')}
             className="bg-sky-600 hover:bg-sky-700 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg hover:shadow-sky-200 transition flex items-center space-x-2"
           >
             <span>Register & Get Started</span>
             <ArrowRight className="w-5 h-5" />
+          </button>
+          <button type="button" onClick={() => onOpenAuth('practice')} className="rounded-xl border border-slate-300 bg-white px-6 py-3.5 font-semibold text-slate-800 hover:bg-slate-100">
+            List your practice
           </button>
         </div>
 
@@ -101,6 +105,7 @@ export default function App() {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
+  const closeAuth = () => { setAuthModalOpen(false); setInviteCode(''); };
 
   return (
     <AuthProvider>
@@ -109,12 +114,9 @@ export default function App() {
         <main className="flex-1">
           <DashboardSwitcher onOpenAuth={handleOpenAuth} />
         </main>
-        {authModalOpen && (
-          <AuthModal
-            initialMode={authModalMode}
-            inviteCode={inviteCode}
-            onClose={() => { setAuthModalOpen(false); setInviteCode(''); }}
-          />
+        {authModalOpen && (authModalMode === 'practice'
+          ? <DoctorListingForm onClose={closeAuth} />
+          : <AuthModal initialMode={authModalMode} inviteCode={inviteCode} onClose={closeAuth} />
         )}
       </div>
     </AuthProvider>

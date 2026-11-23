@@ -4,28 +4,32 @@ const { generatePostVisitSummary } = require('../services/llmService');
 const { sendEmail, getCancellationTemplate } = require('../services/emailService');
 const { deleteCalendarEvent } = require('../services/calendarService');
 const { paymentEnabled } = require('../services/razorpay.mts');
+const { publicDoctorProfile } = require('../services/doctorListing');
 
 /**
  * Search Doctors by Specialization or Name
  */
 async function searchDoctors(req, res, next) {
   try {
-    const { specialization, query } = req.query;
+    const specialization = typeof req.query.specialization === 'string' ? req.query.specialization.trim() : '';
+    const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
 
     const whereClause = {
       role: 'DOCTOR',
+      doctorProfile: { listingStatus: 'APPROVED' },
     };
 
     if (specialization) {
-      whereClause.doctorProfile = {
-        specialization: { contains: specialization },
-      };
+      whereClause.doctorProfile.specialization = { contains: specialization, mode: 'insensitive' };
     }
 
     if (query) {
       whereClause.OR = [
-        { name: { contains: query } },
-        { doctorProfile: { specialization: { contains: query } } },
+        { name: { contains: query, mode: 'insensitive' } },
+        { doctorProfile: { specialization: { contains: query, mode: 'insensitive' } } },
+        { doctorProfile: { clinicName: { contains: query, mode: 'insensitive' } } },
+        { doctorProfile: { clinicCity: { contains: query, mode: 'insensitive' } } },
+        { doctorProfile: { clinicPostalCode: { contains: query } } },
       ];
     }
 
@@ -34,7 +38,7 @@ async function searchDoctors(req, res, next) {
       select: {
         id: true,
         name: true,
-        doctorProfile: true,
+        doctorProfile: publicDoctorProfile,
       },
       orderBy: { name: 'asc' },
     });
@@ -267,7 +271,7 @@ async function getPatientAppointments(req, res, next) {
     const appointments = await prisma.appointment.findMany({
       where: { patientId },
       include: {
-        doctor: { select: { name: true, email: true, doctorProfile: true } },
+        doctor: { select: { name: true, email: true, doctorProfile: publicDoctorProfile } },
         symptomForm: true,
         postVisitNote: true,
         medicationReminders: true,

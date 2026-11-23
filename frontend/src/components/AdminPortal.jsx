@@ -7,6 +7,9 @@ export default function AdminPortal() {
   const [stats, setStats] = useState(null);
   const [emailLogs, setEmailLogs] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [reviewing, setReviewing] = useState(null);
+  const [reviewMessage, setReviewMessage] = useState('');
+  const pendingListings = doctors.filter(doctor => doctor.doctorProfile?.listingStatus === 'PENDING');
   
   // Create / Edit Doctor Modal State
   const [showDoctorModal, setShowDoctorModal] = useState(false);
@@ -60,6 +63,20 @@ export default function AdminPortal() {
     setConsultationFee(100);
     setShowDoctorModal(true);
   };
+
+  async function reviewListing(doctorId, status) {
+    setReviewing(doctorId);
+    setReviewMessage('');
+    try {
+      await api.patch(`/admin/doctors/${doctorId}/listing`, { status });
+      setReviewMessage(status === 'APPROVED' ? 'Practice listed.' : 'Application declined.');
+      await fetchDoctors();
+    } catch (error) {
+      setReviewMessage(error.response?.data?.error || 'Could not update the listing.');
+    } finally {
+      setReviewing(null);
+    }
+  }
 
   const handleOpenEditDoctor = (doc) => {
     setEditingDoctorId(doc.id);
@@ -133,6 +150,29 @@ export default function AdminPortal() {
       </div>
 
       <StaffInvites />
+
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-base font-bold text-slate-900">Practice applications</h2>
+        {reviewMessage && <p role="status" className="text-sm text-slate-700">{reviewMessage}</p>}
+        {pendingListings.length === 0 && <p className="text-sm text-slate-600">No practice applications awaiting review.</p>}
+        {pendingListings.map(doctor => {
+          const profile = doctor.doctorProfile;
+          return (
+            <div key={doctor.id} className="flex flex-wrap items-start justify-between gap-4 border-t border-slate-200 pt-4">
+              <div className="space-y-1 text-sm text-slate-700">
+                <p className="font-semibold">{doctor.name} · {profile.specialization}</p>
+                <p>{doctor.email} · ₹{profile.consultationFee} per visit</p>
+                <p>Medical registration number {profile.registrationNumber}</p>
+                <p>{profile.clinicName}, {profile.clinicAddress}, {profile.clinicCity} {profile.clinicPostalCode}</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" disabled={reviewing === doctor.id} onClick={() => reviewListing(doctor.id, 'APPROVED')} className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Approve listing</button>
+                <button type="button" disabled={reviewing === doctor.id} onClick={() => reviewListing(doctor.id, 'REJECTED')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">Decline</button>
+              </div>
+            </div>
+          );
+        })}
+      </section>
 
       {/* Analytics Cards */}
       {stats && (

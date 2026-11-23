@@ -33,6 +33,10 @@ Use **Sign In** to enter the test account credentials manually when working with
 
 Create the first administrator with `npm run admin:create` in `backend`. In the admin dashboard, use **Invite clinic staff** to choose **Doctor** or **Administrator** and enter the recipient's email. Share the private link with that person. They can open it or paste its code into **Sign Up → Staff Sign Up**, then set their own password. Links expire after 24 hours and work once. Issuing another invitation for the same email replaces the previous link.
 
+### Doctor practice listings
+
+Doctors can select **List your practice** on the homepage and submit their specialty, medical registration number, clinic address, and visit fee. An admin reviews the application under **Practice applications**. A doctor can sign in and track the application. Patients can find and book approved practices by name, specialty, city, or PIN code, and the booking displays the clinic address. Medical registration numbers are available to the applicant and admin for review.
+
 ---
 
 ## 📁 Repository Structure

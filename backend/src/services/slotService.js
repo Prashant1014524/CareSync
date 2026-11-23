@@ -2,6 +2,7 @@ const prisma = require('../prisma');
 const { generatePreVisitSummary } = require('./llmService');
 const { sendEmail, getBookingConfirmationTemplate } = require('./emailService');
 const { createCalendarEvent } = require('./calendarService');
+const { publicDoctorProfile } = require('./doctorListing');
 
 const HOLD_DURATION_MINUTES = 5;
 
@@ -14,8 +15,8 @@ async function getAvailableSlots(doctorId, dateStr, currentPatientId = null) {
     include: { doctorProfile: true },
   });
 
-  if (!doctor || doctor.role !== 'DOCTOR' || !doctor.doctorProfile) {
-    throw new Error('Doctor profile not found');
+  if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
+    throw Object.assign(new Error('Doctor is unavailable for booking.'), { statusCode: 404 });
   }
 
   // Check Doctor Leave
@@ -118,8 +119,8 @@ async function holdSlot({ doctorId, patientId, slotStartTime }) {
     include: { doctorProfile: true },
   });
 
-  if (!doctor || !doctor.doctorProfile) {
-    throw new Error('Doctor profile not found');
+  if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
+    throw new Error('Doctor is unavailable for booking.');
   }
 
   const slotDuration = doctor.doctorProfile.slotDurationMinutes;
@@ -199,8 +200,8 @@ async function bookAppointment({ doctorId, patientId, slotStartTime, symptomsDat
       include: { doctorProfile: true },
     });
 
-    if (!doctor || !doctor.doctorProfile) {
-      throw new Error('Doctor profile not found');
+    if (doctor?.role !== 'DOCTOR' || doctor.doctorProfile?.listingStatus !== 'APPROVED') {
+      throw Object.assign(new Error('Doctor is unavailable for booking.'), { statusCode: 404 });
     }
 
     const dateStr = startTime.toISOString().split('T')[0];
@@ -318,7 +319,7 @@ async function notifyBooking(appointment, preVisitSummary) {
       googleMeetLink: calendarResult.googleMeetLink,
     },
     include: {
-      doctor: { select: { name: true, email: true, doctorProfile: true } },
+      doctor: { select: { name: true, email: true, doctorProfile: publicDoctorProfile } },
       patient: { select: { name: true, email: true } },
       symptomForm: true,
     },

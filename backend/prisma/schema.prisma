@@ -48,10 +48,22 @@ model DoctorProfile {
   endHour             String   @default("17:00") // 24h format HH:mm
   slotDurationMinutes Int      @default(30)
   consultationFee     Float    @default(50.0)
+  listingStatus       DoctorListingStatus @default(APPROVED)
+  registrationNumber  String?
+  clinicName          String?
+  clinicAddress       String?
+  clinicCity          String?
+  clinicPostalCode    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum DoctorListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model DoctorLeave {

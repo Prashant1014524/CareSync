@@ -7,6 +7,7 @@ export default function DoctorPortal() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [selectedApp, setSelectedApp] = useState(null);
+  const [practice, setPractice] = useState(user?.doctorProfile);
   
   // Doctor Profile Editing State
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -45,6 +46,7 @@ export default function DoctorPortal() {
       const res = await api.get('/doctor/profile');
       const doc = res.data.doctor;
       if (doc) {
+        setPractice(doc.doctorProfile);
         setDoctorProfileData({
           name: doc.name || '',
           phone: doc.phone || '',
@@ -176,6 +178,21 @@ export default function DoctorPortal() {
           </div>
         </div>
       </div>
+
+      {practice?.clinicName && (
+        <section className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="space-y-1">
+            <h2 className="font-semibold text-slate-900">{practice.clinicName}</h2>
+            <p className="text-sm text-slate-600">{practice.clinicAddress}, {practice.clinicCity} {practice.clinicPostalCode}</p>
+            <p role="status" className="text-sm text-slate-700">
+              {practice.listingStatus === 'PENDING' && 'Your practice is awaiting admin review.'}
+              {practice.listingStatus === 'APPROVED' && 'Your practice is listed and open for booking.'}
+              {practice.listingStatus === 'REJECTED' && 'Your application was declined. Contact your CareSync administrator for details.'}
+            </p>
+          </div>
+          {practice.listingStatus === 'PENDING' && <button type="button" onClick={fetchMyProfile} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">Check listing status</button>}
+        </section>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
