@@ -4,7 +4,7 @@ const prisma = require('../prisma');
 const { JWT_SECRET } = require('../middleware/authMiddleware');
 
 /**
- * Register User (Patient, Doctor, Admin)
+ * Register a patient account
  */
 async function register(req, res, next) {
   try {
@@ -14,9 +14,8 @@ async function register(req, res, next) {
       return res.status(400).json({ error: 'Email, password, and name are required.' });
     }
 
-    const userRole = (role || 'PATIENT').toUpperCase();
-    if (!['ADMIN', 'DOCTOR', 'PATIENT'].includes(userRole)) {
-      return res.status(400).json({ error: 'Invalid user role specified.' });
+    if (role !== undefined && (typeof role !== 'string' || role.toUpperCase() !== 'PATIENT')) {
+      return res.status(400).json({ error: 'Public registration is for patients only.' });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -26,31 +25,15 @@ async function register(req, res, next) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    let createdDoctorProfile = null;
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
         name,
         phone: phone || null,
-        role: userRole,
+        role: 'PATIENT',
       },
     });
-
-    // If role is DOCTOR, create DoctorProfile
-    if (userRole === 'DOCTOR') {
-      createdDoctorProfile = await prisma.doctorProfile.create({
-        data: {
-          userId: user.id,
-          specialization: req.body.specialization || 'General Medicine',
-          bio: req.body.bio || 'General Healthcare Practitioner',
-          startHour: req.body.startHour || '09:00',
-          endHour: req.body.endHour || '17:00',
-          slotDurationMinutes: Number(req.body.slotDurationMinutes) || 30,
-          consultationFee: Number(req.body.consultationFee) || 50.0,
-        },
-      });
-    }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, {
       expiresIn: '7d',
@@ -65,7 +48,7 @@ async function register(req, res, next) {
         name: user.name,
         role: user.role,
         phone: user.phone,
-        doctorProfile: createdDoctorProfile,
+        doctorProfile: null,
       },
     });
   } catch (err) {

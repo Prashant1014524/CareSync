@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { X, Lock, Mail, User, Phone, Stethoscope, UserPlus, LogIn } from 'lucide-react';
+import { X, Lock, Mail, User, Phone, UserPlus, LogIn } from 'lucide-react';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const { login, register, quickDemoLogin } = useAuth();
   const [isRegister, setIsRegister] = useState(initialMode === 'register');
-  const [role, setRole] = useState('PATIENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [specialization, setSpecialization] = useState('General Practice');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,8 +21,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     try {
       if (isRegister) {
-        await register({ email, password, name, phone, role, specialization });
-        alert(`Account created successfully! Logged in as ${role}: ${name}`);
+        await register({ email, password, name, phone });
       } else {
         await login(email, password);
       }
@@ -61,7 +58,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Register Account</span>
+              <span>Patient Registration</span>
             </button>
           </div>
 
@@ -110,28 +107,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           {isRegister && (
             <>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Account Type *</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'PATIENT', label: 'Patient' },
-                    { id: 'DOCTOR', label: 'Doctor' },
-                    { id: 'ADMIN', label: 'Admin' },
-                  ].map((r) => (
-                    <button
-                      type="button"
-                      key={r.id}
-                      onClick={() => setRole(r.id)}
-                      className={`py-2 rounded-lg font-bold uppercase transition border ${
-                        role === r.id ? 'bg-sky-600 text-white border-sky-600 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -140,7 +115,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Dr. Alex Vance or Jane Smith"
+                    placeholder="e.g. Jane Smith"
                     className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
@@ -160,22 +135,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                 </div>
               </div>
 
-              {role === 'DOCTOR' && (
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Medical Specialization *</label>
-                  <div className="relative">
-                    <Stethoscope className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={specialization}
-                      onChange={(e) => setSpecialization(e.target.value)}
-                      placeholder="e.g. Cardiology, Dermatology, Pediatrics..."
-                      className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                </div>
-              )}
             </>
           )}
 
@@ -214,7 +173,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             disabled={loading}
             className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 rounded-lg shadow transition"
           >
-            {loading ? 'Processing...' : isRegister ? `Create ${role.toLowerCase()} Account` : 'Sign In'}
+            {loading ? 'Processing...' : isRegister ? 'Create patient account' : 'Sign In'}
           </button>
         </form>
 
