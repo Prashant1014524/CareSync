@@ -222,6 +222,8 @@ Run `npm test` inside `backend` to check the registration API regression test lo
 
 ### Welcome emails
 
+Password recovery uses the same `RESEND_API_KEY` and `WELCOME_EMAIL_FROM` settings. Set `FRONTEND_URL` to your deployed frontend origin so reset links open the right site. The link expires after 30 minutes. Accounts created with Google continue to sign in with Google.
+
 CareSync sends a welcome email when a patient creates an account with a password or Google. In Resend, verify a sending domain and create a sending API key. Set `RESEND_API_KEY` and `WELCOME_EMAIL_FROM` on the backend. Use a sender such as `CareSync <welcome@mail.your-domain.example>` with your verified domain. The welcome email uses HTTPS on free Render and works independently of the SMTP settings for other notifications. New signups send once per account, with retries recorded in the existing email logs. Existing accounts signing in again do not trigger a welcome email.
 
 ### Google sign-in, Redis, and test checkout

@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const prisma = require('../prisma');
 
 const developmentSecret = 'healthcare-jwt-secret-key-2026';
 const configuredSecret = process.env.JWT_SECRET;
@@ -8,19 +9,31 @@ if (process.env.NODE_ENV === 'production' &&
 }
 const JWT_SECRET = configuredSecret || developmentSecret;
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
 
   const token = authHeader.split(' ')[1];
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { sessionVersion: true },
+    });
+    if (!user || user.sessionVersion !== (decoded.sessionVersion ?? 0)) {
+      return res.status(401).json({ error: 'Your session expired. Please sign in again.' });
+    }
+    req.user = decoded;
+    next();
+  } catch (error) {
+    next(error);
   }
 };
 

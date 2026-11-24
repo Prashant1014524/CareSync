@@ -5,6 +5,7 @@ import PatientPortal from './components/PatientPortal';
 import DoctorPortal from './components/DoctorPortal';
 import AdminPortal from './components/AdminPortal';
 import AuthModal from './components/AuthModal';
+import PasswordRecovery from './components/PasswordRecovery';
 import DoctorListingForm from './components/DoctorListingForm';
 import { HeartPulse, Stethoscope, ShieldCheck, ArrowRight } from 'lucide-react';
 
@@ -89,23 +90,41 @@ function DashboardSwitcher({ onOpenAuth }) {
 }
 
 export default function App() {
-  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('staff-invite') || '');
-  const [authModalOpen, setAuthModalOpen] = useState(Boolean(inviteCode));
-  const [authModalMode, setAuthModalMode] = useState(inviteCode ? 'staff' : 'login');
+  const [inviteCode, setInviteCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [authModalMode, setAuthModalMode] = useState(null);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    if (new URLSearchParams(url.hash.slice(1)).has('staff-invite')) {
+    function openAuthLink() {
+      const url = new URL(window.location.href);
+      const params = new URLSearchParams(url.hash.slice(1));
+      if (params.has('reset-password')) {
+        setResetToken(params.get('reset-password'));
+        setAuthModalMode('reset');
+      } else if (params.has('staff-invite')) {
+        setInviteCode(params.get('staff-invite'));
+        setAuthModalMode('staff');
+      } else {
+        return;
+      }
       url.hash = '';
       window.history.replaceState(null, '', url);
     }
+    openAuthLink();
+    window.addEventListener('hashchange', openAuthLink);
+    return () => window.removeEventListener('hashchange', openAuthLink);
   }, []);
 
   const handleOpenAuth = (mode = 'login') => {
+    if (mode !== 'staff') setInviteCode('');
+    if (mode !== 'reset') setResetToken('');
     setAuthModalMode(mode);
-    setAuthModalOpen(true);
   };
-  const closeAuth = () => { setAuthModalOpen(false); setInviteCode(''); };
+  const closeAuth = () => {
+    handleOpenAuth(null);
+    setRecoveryEmail('');
+  };
 
   return (
     <AuthProvider>
@@ -114,9 +133,14 @@ export default function App() {
         <main className="flex-1">
           <DashboardSwitcher onOpenAuth={handleOpenAuth} />
         </main>
-        {authModalOpen && (authModalMode === 'practice'
-          ? <DoctorListingForm onClose={closeAuth} onSignIn={() => handleOpenAuth('login')} />
-          : <AuthModal initialMode={authModalMode} inviteCode={inviteCode} onClose={closeAuth} onListPractice={() => handleOpenAuth('practice')} />
+        {authModalMode === 'practice' && <DoctorListingForm onClose={closeAuth} onSignIn={() => handleOpenAuth('login')} />}
+        {['forgot', 'reset'].includes(authModalMode) && (
+          <PasswordRecovery key={authModalMode} mode={authModalMode} token={resetToken} initialEmail={recoveryEmail}
+            onClose={closeAuth} onNavigate={handleOpenAuth} />
+        )}
+        {['login', 'register', 'staff'].includes(authModalMode) && (
+          <AuthModal key={authModalMode} mode={authModalMode} inviteCode={inviteCode} onClose={closeAuth}
+            onNavigate={handleOpenAuth} onForgotPassword={email => { setRecoveryEmail(email); handleOpenAuth('forgot'); }} />
         )}
       </div>
     </AuthProvider>

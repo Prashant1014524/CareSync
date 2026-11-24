@@ -3,9 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import GoogleSignIn from './GoogleSignIn';
 import { X, Lock, Mail, User, Phone, Stethoscope } from 'lucide-react';
 
-export default function AuthModal({ onClose, onListPractice, initialMode = 'login', inviteCode = '' }) {
+export default function AuthModal({ onClose, onNavigate, onForgotPassword, mode = 'login', inviteCode = '' }) {
   const { login, register, registerStaff, googleLogin } = useAuth();
-  const [mode, setMode] = useState(initialMode);
   const [code, setCode] = useState(inviteCode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,7 +14,7 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
   const [loading, setLoading] = useState(false);
   const isStaff = mode === 'staff';
   const isRegister = mode !== 'login';
-  const dialogLabel = isStaff ? 'Staff registration' : isRegister ? 'Patient registration' : 'Sign in to CareSync';
+  const dialogLabel = isStaff ? 'Staff sign up' : isRegister ? 'Patient sign up' : 'Sign in to CareSync';
 
   const handleGoogleCredential = async (credential) => {
     setError(null);
@@ -61,25 +60,7 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
       >
         
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-            {[
-              ['login', 'Sign In'],
-              ['register', 'Patient Sign Up'],
-              ['staff', 'Staff Sign Up'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={mode === value}
-                onClick={() => { setMode(value); setPassword(''); setError(null); }}
-                className={`px-2 sm:px-3 py-2 rounded-lg transition ${
-                  mode === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <h2 className="text-xl font-bold text-slate-900">{dialogLabel}</h2>
 
           <button type="button" aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="w-6 h-6" />
@@ -100,10 +81,10 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
               : 'Patients, doctors, and admins sign in here. Doctors use the email and password they registered with.'}
         </p>
 
-        <button
+        {mode === 'register' && <button
           type="button"
           disabled={loading}
-          onClick={onListPractice}
+          onClick={() => onNavigate('practice')}
           className="flex w-full items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-left hover:bg-sky-100 disabled:opacity-60"
         >
           <Stethoscope aria-hidden="true" className="h-5 w-5 shrink-0 text-sky-700" />
@@ -111,7 +92,7 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
             <span className="block text-sm font-semibold text-sky-900">Doctor Sign Up</span>
             <span className="block text-xs text-sky-800">List your practice</span>
           </span>
-        </button>
+        </button>}
 
         {!isStaff && <GoogleSignIn onCredential={handleGoogleCredential} onError={setError} />}
 
@@ -187,7 +168,11 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
           </div>}
 
           <div>
-            <label htmlFor="auth-password" className="block font-semibold text-slate-700 mb-1">Password *</label>
+            <div className="mb-1 flex justify-between gap-2">
+              <label htmlFor="auth-password" className="font-semibold text-slate-700">Password *</label>
+              {!isRegister && <button type="button" disabled={loading} onClick={() => onForgotPassword(email)}
+                className="font-semibold text-sky-700 hover:underline">Forgot password?</button>}
+            </div>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -212,6 +197,16 @@ export default function AuthModal({ onClose, onListPractice, initialMode = 'logi
             {loading ? 'Processing...' : isStaff ? 'Create staff account' : isRegister ? 'Create patient account' : 'Sign In'}
           </button>
         </form>
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+          <button type="button" disabled={loading} onClick={() => onNavigate(isRegister ? 'login' : 'register')}
+            className="font-semibold text-sky-700 hover:underline">
+            {isRegister ? 'Already have an account? Sign in' : 'Create an account'}
+          </button>
+          {isRegister && <button type="button" disabled={loading} onClick={() => onNavigate(isStaff ? 'register' : 'staff')}
+            className="font-semibold text-sky-700 hover:underline">
+            {isStaff ? 'Patient sign up' : 'Staff sign up'}
+          </button>}
+        </div>
 
       </div>
     </div>

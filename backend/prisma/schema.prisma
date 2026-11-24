@@ -12,6 +12,7 @@ model User {
   id           String        @id @default(uuid())
   email        String        @unique
   passwordHash String?
+  sessionVersion Int @default(0)
   googleSubject String?      @unique
   name         String
   phone        String?
@@ -27,6 +28,14 @@ model User {
   slotHolds           SlotHold[]     @relation("PatientSlotHolds")
   medicationReminders MedicationReminder[]
   staffInvites        StaffInvite[]
+  passwordReset       PasswordReset?
+}
+
+model PasswordReset {
+  userId    String   @id
+  tokenHash String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model StaffInvite {
